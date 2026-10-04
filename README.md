@@ -22,14 +22,16 @@ next to the code it explains.**
 
 *The full pitch — [`concept/proposal.pdf`](concept/proposal.pdf):*
 
-<p align="center">
-  <img src="docs/assets/slide-2.png" width="420" alt="The Problem"/>
-  <img src="docs/assets/slide-3.png" width="420" alt="The Solution — Lore"/>
-</p>
-<p align="center">
-  <img src="docs/assets/slide-4.png" width="420" alt="Why this? Alternatives"/>
-  <img src="docs/assets/slide-5.png" width="420" alt="How Cline is used"/>
-</p>
+<table>
+  <tr>
+    <td align="center"><img src="docs/assets/slide-2.png" width="480" alt="The Problem"/><br/><sub>The Problem</sub></td>
+    <td align="center"><img src="docs/assets/slide-3.png" width="480" alt="The Solution — Lore"/><br/><sub>The Solution — Lore</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/assets/slide-4.png" width="480" alt="Why this? Alternatives"/><br/><sub>Why this? Alternatives</sub></td>
+    <td align="center"><img src="docs/assets/slide-5.png" width="480" alt="How Cline is used"/><br/><sub>How Cline is used</sub></td>
+  </tr>
+</table>
 
 <details><summary>📖 Pitch transcript (text version of the slides)</summary>
 
