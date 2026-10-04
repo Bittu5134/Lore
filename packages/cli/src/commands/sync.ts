@@ -41,7 +41,17 @@ export function commitsSince(root: string, cursor: string | undefined): string[]
       .split("\n")
       .filter((line) => line.trim() !== "");
   } catch {
-    return [];
+    // A cursor the current repo does not know (fresh clone, squashed/force-pushed
+    // history, a cursor committed from another machine) makes the range invalid.
+    // Retrying with the full log self-heals instead of silently processing nothing.
+    if (!cursor) return [];
+    try {
+      return git(root, ["log", "--reverse", "--pretty=format:%H"])
+        .split("\n")
+        .filter((line) => line.trim() !== "");
+    } catch {
+      return [];
+    }
   }
 }
 

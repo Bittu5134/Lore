@@ -14,6 +14,10 @@ nohup.out
 .lore/raw/
 
 # Local bookkeeping that must not be shared (machine-specific cursors/locks).
+# state.json holds a git SHA cursor: it is per-machine, it is rewritten by the
+# post-commit hook on EVERY commit (tracking it means the tree is never clean),
+# and a foreign SHA makes `lore sync` find no commits to process.
+.lore/meta/state.json
 .lore/meta/inference.lock
 .lore/meta/previous-hooks-path.txt
 .lore/meta/search.db
