@@ -69,3 +69,23 @@ test("parseDecisionJson tolerates fences and surrounding prose", () => {
   const raw = parseDecisionJson('Here you go:\n```json\n{"title":"T"}\n```\nThanks');
   assert.equal(raw.title, "T");
 });
+
+test("parseDecisionJson repairs literal newlines inside strings", () => {
+  const raw = parseDecisionJson('{"title":"T","context":"line one\nline two","decision":"d"}');
+  assert.equal(raw.context, "line one\nline two");
+});
+
+test("parseDecisionJson ignores content after the JSON object", () => {
+  const raw = parseDecisionJson('{"title":"First","context":"c","decision":"d"}\n\nNote {"extra":1}');
+  assert.equal(raw.title, "First");
+});
+
+test("parseDecisionJson finds the decision after a [thinking] preamble", () => {
+  const raw = parseDecisionJson(
+    '[thinking] The user wants {"title": string, "context": string} distilled.\n' +
+      "[thinking] Let me look at the events.\n" +
+      '{"title":"Real Title","context":"ctx","decision":"dec"}',
+  );
+  assert.equal(raw.title, "Real Title");
+  assert.equal(raw.decision, "dec");
+});

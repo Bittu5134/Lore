@@ -61,18 +61,101 @@ export function buildPrompt(transcript: string, reason?: string): string {
   return `${header}\n\nEVENTS CAPTURED:\n${transcript.slice(0, 12000)}`;
 }
 
+function repairControlChars(input: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const ch of input) {
+    if (!inString) {
+      if (ch === '"') inString = true;
+      out += ch;
+      continue;
+    }
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = false;
+      out += ch;
+      continue;
+    }
+    const code = ch.charCodeAt(0);
+    if (code < 0x20) {
+      if (ch === "\n") out += "\\n";
+      else if (ch === "\r") out += "\\r";
+      else if (ch === "\t") out += "\\t";
+      else out += `\\u${code.toString(16).padStart(4, "0")}`;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/** Collect balanced {...} objects starting at each `{`, outermost first. */
+function extractJsonCandidates(text: string): string[] {
+  const candidates: string[] = [];
+  for (let start = 0; start < text.length; start += 1) {
+    if (text[start] !== "{") continue;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < text.length; i += 1) {
+      const ch = text[i] ?? "";
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === "{") depth += 1;
+      else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          candidates.push(text.slice(start, i + 1));
+          break;
+        }
+      }
+    }
+    if (candidates.length >= 64) break;
+  }
+  return candidates;
+}
+
+function looksLikeDecision(value: unknown): value is RawDecision {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return "title" in record || "decision" in record || "context" in record;
+}
+
 export function parseDecisionJson(text: string): RawDecision {
   const withoutFences = text.replace(/```json/gi, "```").replace(/```/g, "");
-  const start = withoutFences.indexOf("{");
-  const end = withoutFences.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error(`inference did not return JSON (got: ${text.slice(0, 160)})`);
+
+  // `cline -p` prints its [thinking] stream to stdout, so the final answer is not
+  // the first JSON-looking fragment. Try every candidate object and keep the
+  // first one that is valid JSON and looks like a decision record.
+  for (const candidate of extractJsonCandidates(withoutFences)) {
+    for (const attempt of [candidate, repairControlChars(candidate)]) {
+      try {
+        const parsed: unknown = JSON.parse(attempt);
+        if (looksLikeDecision(parsed)) return parsed;
+      } catch {
+        // try the repaired/next candidate
+      }
+    }
   }
-  const parsed = JSON.parse(withoutFences.slice(start, end + 1)) as unknown;
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("inference JSON was not an object");
-  }
-  return parsed as RawDecision;
+
+  throw new Error(
+    `inference did not return a decision object | raw: ${text.slice(0, 300)}`,
+  );
 }
 
 function derivedSources(input: CompileInput): string[] {
