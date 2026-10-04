@@ -114,3 +114,15 @@ test("writeAdr resolves id collisions from concurrent writers", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("writeState works without init (capture-first workflows)", () => {
+  const root = tempRoot();
+  try {
+    const store = createStore(root);
+    store.writeState({ nextAdrId: 5 });
+    assert.ok(existsSync(join(root, ".lore/meta/state.json")));
+    assert.equal(store.readState().nextAdrId, 5);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

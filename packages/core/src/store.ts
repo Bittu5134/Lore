@@ -95,6 +95,7 @@ export function createStore(root: string): LoreStore {
   }
 
   function writeConfig(config: LoreConfig): void {
+    mkdirSync(abs(LORE_PATHS.meta), { recursive: true });
     writeFileSync(abs(LORE_PATHS.config), `${JSON.stringify(config, null, 2)}\n`, "utf8");
   }
 
@@ -107,6 +108,7 @@ export function createStore(root: string): LoreStore {
   }
 
   function writeState(state: LoreState): void {
+    mkdirSync(abs(LORE_PATHS.meta), { recursive: true });
     writeFileSync(abs(LORE_PATHS.state), `${JSON.stringify(state, null, 2)}\n`, "utf8");
   }
 
