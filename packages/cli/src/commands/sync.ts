@@ -13,6 +13,8 @@ function git(root: string, args: string[]): string {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
+    // A large commit (e.g. a big refactor) can produce a multi-MB diff.
+    maxBuffer: 16 * 1024 * 1024,
   }).trim();
 }
 
