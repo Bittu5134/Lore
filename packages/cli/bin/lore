@@ -5,21 +5,22 @@
  * Prefers the repo-local tsx binary (works offline, no npx fetch) and falls
  * back to `npx --yes tsx` when the repo has not been `npm install`ed yet.
  */
-const { spawnSync } = require("node:child_process");
-const path = require("node:path");
-const fs = require("node:fs");
+import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const here = path.dirname(fs.realpathSync(__filename));
-const entry = path.join(here, "..", "src", "index.ts");
+const here = dirname(realpathSync(fileURLToPath(import.meta.url)));
+const entry = join(here, "..", "src", "index.ts");
 const args = process.argv.slice(2);
-const binDir = path.join(here, "..", "..", "..", "node_modules", ".bin");
+const binDir = join(here, "..", "..", "..", "node_modules", ".bin");
 const isWin = process.platform === "win32";
 
 function run(cmd, cmdArgs) {
   return spawnSync(cmd, cmdArgs, { stdio: "inherit", shell: isWin });
 }
 
-const localTsx = [path.join(binDir, "tsx"), path.join(binDir, "tsx.cmd")].find((p) => fs.existsSync(p));
+const localTsx = [join(binDir, "tsx"), join(binDir, "tsx.cmd")].find((p) => existsSync(p));
 
 let result;
 if (localTsx && localTsx.endsWith(".cmd")) {
