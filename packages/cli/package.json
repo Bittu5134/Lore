@@ -10,5 +10,6 @@
   "dependencies": {
     "@lore/core": "*",
     "@lore/mcp": "*"
-  }
+  },
+  "license": "MIT"
 }

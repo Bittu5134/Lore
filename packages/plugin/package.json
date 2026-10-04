@@ -26,5 +26,6 @@
     "@cline/sdk": {
       "optional": true
     }
-  }
+  },
+  "license": "MIT"
 }

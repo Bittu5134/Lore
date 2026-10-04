@@ -26,5 +26,6 @@
   },
   "dependencies": {
     "@cline/sdk": "^0.0.90"
-  }
+  },
+  "license": "MIT"
 }
