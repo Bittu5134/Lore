@@ -1,42 +1,63 @@
 # Lore — Hackathon Demo Script
 
-Everything below is verified working. Total run time ≈ 4–6 min (inference calls dominate).
-
-Setup once:
+Everything below is verified working. Total run time ≈ 4–6 min (model calls dominate).
+Commands are path-independent: replace `<LORE>` with the path to this clone.
 
 ```bash
-cd /home/bittu/Developer/temp/Lore
+cd <LORE>                       # this repository
 export LORE="npx --yes tsx $PWD/packages/cli/src/index.ts"
+export DEMO=/tmp/lore-demo
 ```
+
+Pre-flight (10 seconds):
+
+```bash
+npm run setup                   # checks Node, Cline, auth, plugin; prints what's missing
+$LORE doctor                    # the same checks, each with the exact fix
+```
+
+---
+
+## Act 0 — Judge quickstart: prove it with NO model call (30 seconds, works offline)
+
+```bash
+rm -rf $DEMO && mkdir -p $DEMO/.lore/raw && cd $DEMO && git init -q
+cp <LORE>/packages/core/fixtures/session.sample.jsonl .lore/raw/session.jsonl
+$LORE compile --fixture
+cat .lore/wiki/ADR-*.md
+```
+
+**Say:** "That is the whole pipeline — evidence in, decision record out — with no model call, so it works
+even without Cline auth. With Cline, that evidence is a real agent session."
 
 ---
 
 ## Act 1 — "Open the black box" (the centrepiece)
 
 ```bash
-rm -rf /tmp/demo && mkdir -p /tmp/demo && cd /tmp/demo && git init -q
-npx --yes tsx /home/bittu/Developer/temp/Lore/packages/cli/src/index.ts init
+rm -rf $DEMO && mkdir -p $DEMO && cd $DEMO && git init -q
+$LORE init
 printf 'export const DEFAULT_CONFIG = { port: 3000 };\n' > config.ts
 ```
 
 Ask a real agent to change the code **in front of the judges**:
 
 ```bash
-cline -p "make the config loader accept an APP_CONFIG environment override; keep the JSON file as the single source of truth" --cwd /tmp/demo
+cline -p "make the config loader accept an APP_CONFIG environment override; keep the JSON file as the single source of truth" --cwd $DEMO
 ```
 
 While it runs, point at the growing capture file — Lore is recording the agent's
 **inner monologue**, not just the result:
 
 ```bash
-watch -n1 'wc -l /tmp/demo/.lore/raw/session.jsonl'
+watch -n1 "wc -l $DEMO/.lore/raw/session.jsonl"
 ```
 
 Now distil the session into a decision record:
 
 ```bash
-npx --yes tsx /home/bittu/Developer/temp/Lore/packages/cli/src/index.ts compile
-cat /tmp/demo/.lore/wiki/ADR-*.md
+cd $DEMO && $LORE compile
+cat .lore/wiki/ADR-*.md
 ```
 
 **Say:** "The ADR contains the context, the decision, and the alternatives the agent
@@ -45,40 +66,39 @@ considered and rejected — the reasoning that a commit diff can never show."
 ## Act 2 — Continuity (a new session reads the lore)
 
 ```bash
-cd /tmp/demo && cline -p "add input validation to the config loader" --cwd /tmp/demo
+cd $DEMO && cline -p "add input validation to the config loader" --cwd $DEMO
 ```
 
-The `.clinerules/lore.md` rule makes the agent read `.lore/wiki/` first, so it respects
-the recorded decision instead of re-litigating it. Ask it: *"what did we decide about
-dotenv, and why?"* — it answers from the ADR.
+`lore init` wrote `.clinerules/lore.md`, so the agent reads `.lore/wiki/` before editing.
+Ask it: *"what did we decide about dotenv, and why?"* — it answers from the ADR.
 
 ## Act 3 — Works without AI (human commits)
 
 ```bash
-cd /tmp/demo
+cd $DEMO
 printf 'export const DEFAULT_CONFIG = { port: 3000, retries: 3 };\n' > config.ts
-git add -A && git -c user.email=dev@x.com -c user.name=Dev commit -m "feat: add retry count to default config"
+git add -A && git -c user.email=dev@x.com -c user.name=Dev commit -m "feat: add retry count to the default config"
 ```
 
-The `post-commit` hook (installed into `.lore/hooks`, activated via `core.hooksPath`)
-fires `lore sync` automatically — a new ADR appears with **no AI in the loop**:
+The `post-commit` hook (installed into `.lore/hooks`, activated via `core.hooksPath`) fires
+`lore sync` automatically — a new ADR appears with **no AI in the loop**:
 
 ```bash
-ls /tmp/demo/.lore/wiki/ ; git -C /tmp/demo log --oneline -1
+ls .lore/wiki .lore/drafts
 ```
 
-Low-confidence inferences land in `.lore/drafts/` instead (confidence < 0.60) — show both.
+Low-confidence inferences land in `.lore/drafts/` instead of `wiki/` (confidence < 0.60) —
+show both; that is the review gate.
 
 ## Act 4 — Merge & Mechanism
 
 ```bash
-cd /tmp/demo
-# simulate two branches extending the wiki
+cd $DEMO
 git checkout -q -b feature && echo x > f.ts && git add -A && git -c user.email=d@x.com -c user.name=D commit -q -m "feat: f" 2>/dev/null
 git checkout -q master && echo y > g.ts && git add -A && git -c user.email=d@x.com -c user.name=D commit -q -m "feat: g" 2>/dev/null
 git merge feature 2>/dev/null || true
-npx --yes tsx /home/bittu/Developer/temp/Lore/packages/cli/src/index.ts reconcile
-npx --yes tsx /home/bittu/Developer/temp/Lore/packages/cli/src/index.ts share --out /tmp/lore-bundle.json
+$LORE reconcile
+$LORE share --out /tmp/lore-bundle.json
 ```
 
 **Say:** "When two maintainers (or two agents) both extend the wiki, Lore reconciles it —
@@ -87,12 +107,11 @@ keeping both sides — and can hand the knowledge to another repo as a portable 
 ## Act 5 — Dogfood
 
 ```bash
-cat /home/bittu/Developer/temp/Lore/.lore/wiki/index.md
+cat <LORE>/.lore/wiki/index.md
 ```
 
-Lore's own repository wiki contains ADRs written **by Lore, about building Lore**
-(e.g. "Layer Lore as one core plus thin adapters" and "Shell out to the Cline CLI as
-the inference backend"). That is the product proving itself.
+Lore's own repository wiki contains ADRs written **by Lore, about building Lore** — the
+product proving itself on its own history.
 
 ---
 

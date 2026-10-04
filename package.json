@@ -12,8 +12,10 @@
   },
   "scripts": {
     "lore": "tsx packages/cli/src/index.ts",
+    "setup": "node scripts/setup.mjs",
     "build": "tsc -b packages/core packages/cli packages/mcp packages/plugin",
-    "test": "tsx --test packages/core/test/*.test.ts"
+    "test": "tsx --test packages/core/test/*.test.ts",
+    "typecheck": "tsc -p packages/core/tsconfig.json && tsc -p packages/cli/tsconfig.json && tsc -p packages/mcp/tsconfig.json && tsc -p packages/plugin/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

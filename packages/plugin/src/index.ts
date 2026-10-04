@@ -10,7 +10,7 @@
  * plugin; everything is wrapped in try/catch so capture can never break or
  * slow down the agent loop.
  */
-import { appendFileSync, mkdirSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 function loreRoot(): string {
@@ -117,6 +117,12 @@ function capture(event: RuntimeEventLike): void {
   try {
     // Never record the events of Lore's own inference runs.
     if (process.env.LORE_INTERNAL || inferenceInFlight()) return;
+
+    // Opt-in only: capture just in repositories that ran `lore init`. Without
+    // this, installing the plugin would silently create .lore/ folders in every
+    // unrelated project the user happens to run an agent in.
+    if (!existsSync(join(loreRoot(), ".lore", "config.json"))) return;
+
     const record = toRecord(event);
     if (!record) return;
     appendFileSync(join(rawDir(), "session.jsonl"), `${JSON.stringify(record)}\n`, "utf8");
