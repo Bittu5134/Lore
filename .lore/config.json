@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "autonomy": "auto",
+  "confidenceThreshold": 0.6,
+  "inference": {
+    "provider": "cline-cli",
+    "thinking": "medium"
+  },
+  "ignore": [
+    "node_modules/**",
+    ".git/**",
+    "dist/**",
+    "build/**",
+    "*.lock",
+    "*.log",
+    ".lore/meta/**"
+  ],
+  "autoMergeReconcile": true
+}

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# lore CLI shim - runs the TypeScript entry point through tsx without a build step.
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec npx --yes tsx "$DIR/../src/index.ts" "$@"

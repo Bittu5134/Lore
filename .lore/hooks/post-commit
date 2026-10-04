@@ -1,0 +1,10 @@
+#!/bin/sh
+# Lore post-commit hook (installed by `lore init`).
+# Runs synchronously so the wiki is updated the moment the event happens.
+# Set LORE_HOOK_ASYNC=1 to detach instead.
+if [ -n "${LORE_HOOK_ASYNC:-}" ]; then
+  npx --yes tsx "/home/bittu/Developer/temp/Lore/packages/cli/src/index.ts" sync --auto >/dev/null 2>&1 &
+else
+  npx --yes tsx "/home/bittu/Developer/temp/Lore/packages/cli/src/index.ts" sync --auto || true
+fi
+exit 0
