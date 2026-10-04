@@ -44,7 +44,7 @@ export async function run(args: string[]): Promise<void> {
       command: "npx",
       args: ["--yes", "tsx", MCP_ENTRY],
       env: { LORE_ROOT: root },
-      autoApprove: ["search_lore", "get_adr"],
+      autoApprove: ["search_lore", "get_adr", "record_decision"],
     };
     mkdirSync(dirname(configPath), { recursive: true });
     writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
