@@ -1,31 +1,25 @@
 ---
 name: lore
-description: Use the repository's Lore wiki before changing code, and record new architectural decisions after.
+description: Show Lore architectural memory stats, decisions, and open the visual dashboard in your browser. Also guides architectural consultation before modifying code.
 ---
 
-# Lore — architectural memory
+# Lore — Architectural Memory, Stats & Graph
 
-This repository keeps architectural decision records (ADRs) in `.lore/wiki/`.
+When invoked with `/lore` or when asked about Lore statistics:
 
-## Before you edit code
+1. **Check Status**: Run `lore status` (or `npx --yes tsx <loreHome>/packages/cli/src/index.ts status`) to collect metrics:
+   - Total accepted ADRs and pending drafts.
+   - Autonomy mode, confidence threshold, and git hook status.
+   - Recent evidence and capture files.
+2. **Generate Visual Graph**: Run `lore graph` (or `npx --yes tsx <loreHome>/packages/cli/src/index.ts graph`). This writes a self-contained interactive SVG decision graph to `.lore/wiki/graph.html`.
+3. **Present Statistics**:
+   - Total ADRs grouped by categories (Architecture, Capture, MCP, Git Sync, Storage).
+   - Any superseded decisions (e.g., ADR-0012 superseding ADR-0005).
+   - Any pending drafts awaiting review in `.lore/drafts/`.
+4. **Open in Web Browser**:
+   - Provide a direct clickable link to the user: `file://<absolute-repo-path>/.lore/wiki/graph.html`.
+   - Ask or run `xdg-open .lore/wiki/graph.html` (Linux) / `open .lore/wiki/graph.html` (macOS) / `start .lore/wiki/graph.html` (Windows) to pop open the visual graph in their default browser.
 
-1. Read `.lore/wiki/index.md`.
-2. Search for the files and concepts you are about to touch:
-   - with the Lore MCP server connected, call `search_lore`;
-   - otherwise read the 2-3 ADRs whose titles or tags match your task.
-   Read at most 3 — respect the context budget.
-3. If an ADR covers your area, follow it. To contradict it, say explicitly in your final answer which
-   ADR you are superseding and why.
-
-## While you work
-
-When you make a non-obvious choice — a library, a pattern, a data structure, a trade-off — record it:
-call `record_decision` if the MCP server is available, otherwise write an ADR into `.lore/drafts/`
-using `.lore/wiki/ADR-0000-template.md`. Always include the alternatives you rejected and the reason
-each was rejected.
-
-Never edit `.lore/raw/` (immutable evidence) or `.lore/meta/` (bookkeeping).
-
-## At the end
-
-State which ADRs you consulted and what you recorded.
+## Architectural Consultation (Before editing code)
+- Read `.lore/wiki/index.md` or call `search_lore` to check existing constraints.
+- Follow active ADRs, and record new decisions into `.lore/drafts/` or via `record_decision`.
