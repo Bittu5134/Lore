@@ -7,10 +7,17 @@
   "cline": {
     "plugins": [
       {
-        "paths": ["./src/index.ts"],
-        "capabilities": ["hooks"]
+        "paths": [
+          "./src/index.ts"
+        ],
+        "capabilities": [
+          "hooks"
+        ]
       }
     ]
+  },
+  "dependencies": {
+    "@cline/sdk": "^0.0.90"
   },
   "peerDependencies": {
     "@cline/sdk": "*"

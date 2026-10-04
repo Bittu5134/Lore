@@ -5,6 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "dependencies": {
-    "@lore/core": "*"
+    "@lore/core": "*",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "zod": "^3.25.76"
   }
 }
