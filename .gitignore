@@ -17,3 +17,4 @@ nohup.out
 .lore/meta/previous-hooks-path.txt
 .lore/meta/search.db
 .lore/meta/links.json
+.lore/wiki/graph.html
