@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# Lore note: .lore/ IS committed on purpose - it is the shared knowledge base.
+# Only local session scratch state is ignored here:
+.lore/raw/*.tmp

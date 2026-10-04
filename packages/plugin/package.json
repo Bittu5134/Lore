@@ -1,0 +1,23 @@
+{
+  "name": "@lore/plugin",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "cline": {
+    "plugins": [
+      {
+        "paths": ["./src/index.ts"],
+        "capabilities": ["hooks"]
+      }
+    ]
+  },
+  "peerDependencies": {
+    "@cline/sdk": "*"
+  },
+  "peerDependenciesMeta": {
+    "@cline/sdk": {
+      "optional": true
+    }
+  }
+}
