@@ -3,6 +3,7 @@ dist/
 *.tsbuildinfo
 .DS_Store
 nohup.out
+.pi/
 
 # The curated, shareable knowledge IS committed: .lore/wiki/ (ADRs) and
 # .lore/drafts/, plus .lore/config.json and .lore/hooks/.
