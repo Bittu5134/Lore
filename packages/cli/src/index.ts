@@ -79,7 +79,7 @@ THE REST (only when you need it)
   mcp [--install]             Run the MCP server, or register it with Cline
   hook <event>                Internal: capture adapter for Cline hook payloads
 
-Docs: README.md (start here)  |  DEMO.md (60-second version)  |  docs/scaling.md
+Docs: README.md (start here)  |  docs/demo.md (60-second version)  |  docs/scaling.md
 `;
 
 function assertNode(): void {

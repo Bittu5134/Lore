@@ -45,7 +45,7 @@ npm run demo     # offline by default; --live for real model calls
 **The three beats:** `lore init` once → work normally (agent or human) → `lore query` to ask why.
 Everything else (`review`, `sync`, `graph`, `share`, …) is there when you need it — you almost never do.
 
-See **[DEMO.md](DEMO.md)** for the judge walkthrough, and **[README.md](README.md)** for the full command reference.
+See **[docs/demo.md](docs/demo.md)** for the demo walkthrough, **[docs/judge.md](docs/judge.md)** for architecture and scoring details, and below for the full command reference.
 
 ---
 
@@ -90,7 +90,7 @@ npm workspaces + TypeScript (run through `tsx`, no build step), Node 22+.
 | `packages/mcp` | zero-dependency stdio MCP server |
 
 Frozen interfaces live in `packages/core/src/types.ts` (`CONTRACTS_VERSION`); each package has a `SPEC.md`
-describing its behaviour and acceptance criteria. `PLAN.md` is the original build plan.
+describing its behaviour and acceptance criteria. `docs/plan.md` is the original build plan.
 
 ## Command reference
 

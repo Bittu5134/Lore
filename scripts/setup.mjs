@@ -156,7 +156,7 @@ process.stdout.write(
     "  2. use it on a repo:             cd <repo> && npx --yes tsx " +
     join(ROOT, "packages", "cli", "src", "index.ts") +
     " init\n" +
-    "  3. full judge walkthrough:       DEMO.md\n" +
+    "  3. full walkthrough:             docs/demo.md\n" +
     "  4. check anything:               npx --yes tsx " +
     join(ROOT, "packages", "cli", "src", "index.ts") +
     " doctor\n",
