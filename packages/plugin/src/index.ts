@@ -69,11 +69,14 @@ function compileCommand(root: string): { cmd: string; args: string[] } | null {
  * invokes Cline, and we skip while the lock exists).
  */
 function spawnDetachedCompile(root: string): void {
+  const logPath = join(root, ".lore", "meta", "compile.log");
   try {
-    const cmd = compileCommand(root);
-    if (!cmd) return;
-    const logPath = join(root, ".lore", "meta", "compile.log");
     mkdirSync(join(root, ".lore", "meta"), { recursive: true });
+    const cmd = compileCommand(root);
+    if (!cmd) {
+      appendFileSync(logPath, `${new Date().toISOString()} skip: no compile command (run lore init?)\n`);
+      return;
+    }
     const fd = openSync(logPath, "a");
     const child = spawn(cmd.cmd, cmd.args, {
       cwd: root,
@@ -241,7 +244,10 @@ function capture(event: RuntimeEventLike): void {
     appendFileSync(join(rawDir(), "session.jsonl"), `${JSON.stringify(record)}\n`, "utf8");
 
     // The run is over -> decisions write themselves. This is the whole point.
-    if (event.type === "run-finished" && !inferenceInFlight()) {
+    // Trigger on ANY terminal event (success or failure): a failed session still
+    // has reasoning worth capturing.
+    const sessionEnded = event.type === "run-finished" || event.type === "run-failed";
+    if (sessionEnded && !inferenceInFlight()) {
       const config = readLoreConfig(root);
       if (config && config.autonomy !== "off") spawnDetachedCompile(root);
     }
