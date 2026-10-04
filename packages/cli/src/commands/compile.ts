@@ -10,7 +10,7 @@ import { createClineCompiler, createStore } from "@lore/core";
  * `--fixture` proves the whole pipeline with NO model call: for judges without
  * Cline auth, for CI, and for demos in an offline room.
  */
-const FIXTURE_DECISION = {
+export const FIXTURE_DECISION = {
   decisions: [
     {
       title: "Extend the existing JSON config loader instead of adding dotenv",

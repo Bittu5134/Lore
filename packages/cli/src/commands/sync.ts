@@ -6,6 +6,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createClineCompiler, createStore, type LoreEvent } from "@lore/core";
+import { FIXTURE_DECISION } from "./compile.ts";
 
 function git(root: string, args: string[]): string {
   return execFileSync("git", args, {
@@ -73,7 +74,10 @@ export async function run(args: string[]): Promise<void> {
   store.appendEvents(events);
   log(`lore: captured ${events.length} commit(s)`);
 
-  const compiler = createClineCompiler(store.readConfig());
+  const fixture = args.includes("--fixture");
+  const compiler = fixture
+    ? createClineCompiler(store.readConfig(), { infer: () => JSON.stringify(FIXTURE_DECISION) })
+    : createClineCompiler(store.readConfig());
   const results = await compiler.compile({
     events,
     repoRoot: root,

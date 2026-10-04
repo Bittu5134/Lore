@@ -26,29 +26,26 @@ and shared with the team.
 
 ---
 
-## Quickstart (60 seconds)
+## Quickstart (60 seconds, one command)
 
 ```bash
-git clone <this repo> && cd Lore
-npm install
-npm run setup          # checks Node/cline, installs the Cline plugin, runs doctor
+npm run setup    # checks the environment and installs everything
 
-# prove the pipeline with NO model call (works offline / without Cline auth):
-mkdir -p /tmp/demo && cd /tmp/demo && git init -q
-npx --yes tsx "$OLDPWD/packages/cli/src/index.ts" init
-cp "$OLDPWD/packages/core/fixtures/session.sample.jsonl" .lore/raw/session.jsonl
-npx --yes tsx "$OLDPWD/packages/cli/src/index.ts" compile --fixture
-cat .lore/wiki/ADR-*.md      # <- a decision record, with rejected alternatives
+# then just work — Lore captures Cline sessions and commits on its own
+
+lore             # the dashboard: what it saw, decided, and is waiting on
 ```
 
-With Cline installed and authenticated (`cline auth`), replace `--fixture` with a real run:
+That's it. To see it end-to-end without touching your own repo, run the self-narrating demo:
 
 ```bash
-cline -p "make the config loader accept an APP_CONFIG override" --cwd /tmp/demo   # agent works; Lore captures it
-npx --yes tsx "$OLDPWD/packages/cli/src/index.ts" compile                          # real inference -> ADR
+npm run demo     # offline by default; --live for real model calls
 ```
 
-See **[DEMO.md](DEMO.md)** for the full 5-minute judge script.
+**The three beats:** `lore init` once → work normally (agent or human) → `lore query` to ask why.
+Everything else (`review`, `sync`, `graph`, `share`, …) is there when you need it — you almost never do.
+
+See **[DEMO.md](DEMO.md)** for the judge walkthrough, and **[README.md](README.md)** for the full command reference.
 
 ---
 

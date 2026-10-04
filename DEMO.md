@@ -1,130 +1,122 @@
-# Lore — Hackathon Demo Script
+# Lore — Demo
 
-Everything below is verified working. Total run time ≈ 4–6 min (model calls dominate).
-Commands are path-independent: replace `<LORE>` with the path to this clone.
-
-```bash
-cd <LORE>                       # this repository
-export LORE="npx --yes tsx $PWD/packages/cli/src/index.ts"
-export DEMO=/tmp/lore-demo
-```
-
-Pre-flight (10 seconds):
+## The 60-second version
 
 ```bash
-npm run setup                   # checks Node, Cline, auth, plugin; prints what's missing
-$LORE doctor                    # the same checks, each with the exact fix
+npm run demo
 ```
+
+One command. It narrates itself, needs no typing, and works **offline** (a captured
+session fixture is used, so no model key is required). Pass `--live` to use a real
+Cline session if `cline auth` is set up.
+
+**The three beats the judges see:**
+
+1. `lore init` — one command sets everything up
+2. *an agent (or a human) does real work* — you don't type anything else
+3. `lore query dotenv` — the answer to "why did we do it this way?"
+
+That's the whole product. Everything below is for the presenter.
 
 ---
 
-## Act 0 — Judge quickstart: prove it with NO model call (30 seconds, works offline)
+## What `npm run demo` does (in order)
+
+| Beat | What happens | What to say |
+|---|---|---|
+| 0 | Fresh playground in `/tmp/lore-demo` | "A brand new repo, nothing set up." |
+| 1 | `lore init` | "One command: knowledge store, git hooks, agent rule." |
+| 2 | An agent edits code (or a captured session is seeded offline) | "Cline is working. Lore is recording its reasoning live." |
+| 3 | **The session ends — the decision writes itself** | "I didn't type anything. Lore compiled the evidence on its own." |
+| 4 | `lore query` prints the ADR | "Context. Decision. Rejected alternatives. A diff can never tell you this." |
+| 5 | A human commits by hand | "No AI in this commit. The git hook documented it anyway." |
+| 6 | Lore's own repo wiki | "It documented building itself." |
+
+---
+
+## If you only have 30 seconds (offline)
 
 ```bash
-rm -rf $DEMO && mkdir -p $DEMO/.lore/raw && cd $DEMO && git init -q
-cp <LORE>/packages/core/fixtures/session.sample.jsonl .lore/raw/session.jsonl
-$LORE compile --fixture
+npm run setup && npm run demo
+```
+
+No model call, no auth. The pipeline runs on a captured-session fixture.
+
+---
+
+## Manual walkthrough (if the live demo breaks)
+
+### Judge quickstart: prove it with NO model call
+
+```bash
+cd <LORE>   # this repository
+export L="npx --yes tsx $PWD/packages/cli/src/index.ts"
+
+rm -rf /tmp/lore-demo && mkdir -p /tmp/lore-demo && cd /tmp/lore-demo && git init -q
+mkdir -p .lore/raw && cp <LORE>/packages/core/fixtures/session.sample.jsonl .lore/raw/session.jsonl
+$L compile --fixture
 cat .lore/wiki/ADR-*.md
 ```
 
-**Say:** "That is the whole pipeline — evidence in, decision record out — with no model call, so it works
-even without Cline auth. With Cline, that evidence is a real agent session."
+**Say:** "Evidence in, decision record out, no model call. That's the pipeline."
 
----
-
-## Act 1 — "Open the black box" (the centrepiece)
+### Live agent capture (needs `cline auth`)
 
 ```bash
-rm -rf $DEMO && mkdir -p $DEMO && cd $DEMO && git init -q
-$LORE init
+rm -rf /tmp/lore-demo && mkdir -p /tmp/lore-demo && cd /tmp/lore-demo && git init -q
+$L init
 printf 'export const DEFAULT_CONFIG = { port: 3000 };\n' > config.ts
+cline -p "make the config loader accept an APP_CONFIG environment override" --cwd /tmp/lore-demo
 ```
 
-Ask a real agent to change the code **in front of the judges**:
+While it runs: `watch -n1 "wc -l /tmp/lore-demo/.lore/raw/session.jsonl"` in another terminal.
+When it finishes, the ADR appears on its own — no `compile` command needed.
+
+**Say:** "The session ended and the decision record wrote itself. Zero human intervention."
+
+### Human commits (no AI)
 
 ```bash
-cline -p "make the config loader accept an APP_CONFIG environment override; keep the JSON file as the single source of truth" --cwd $DEMO
-```
-
-While it runs, point at the growing capture file — Lore is recording the agent's
-**inner monologue**, not just the result:
-
-```bash
-watch -n1 "wc -l $DEMO/.lore/raw/session.jsonl"
-```
-
-Now distil the session into a decision record:
-
-```bash
-cd $DEMO && $LORE compile
-cat .lore/wiki/ADR-*.md
-```
-
-**Say:** "The ADR contains the context, the decision, and the alternatives the agent
-considered and rejected — the reasoning that a commit diff can never show."
-
-## Act 2 — Continuity (a new session reads the lore)
-
-```bash
-cd $DEMO && cline -p "add input validation to the config loader" --cwd $DEMO
-```
-
-`lore init` wrote `.clinerules/lore.md`, so the agent reads `.lore/wiki/` before editing.
-Ask it: *"what did we decide about dotenv, and why?"* — it answers from the ADR.
-
-## Act 3 — Works without AI (human commits)
-
-```bash
-cd $DEMO
+cd /tmp/lore-demo
 printf 'export const DEFAULT_CONFIG = { port: 3000, retries: 3 };\n' > config.ts
-git add -A && git -c user.email=dev@x.com -c user.name=Dev commit -m "feat: add retry count to the default config"
-```
-
-The `post-commit` hook (installed into `.lore/hooks`, activated via `core.hooksPath`) fires
-`lore sync` automatically — a new ADR appears with **no AI in the loop**:
-
-```bash
+git add -A && git -c user.email=dev@x.com -c user.name=Dev commit -m "feat: add retry count"
 ls .lore/wiki .lore/drafts
 ```
 
-Low-confidence inferences land in `.lore/drafts/` instead of `wiki/` (confidence < 0.60) —
-show both; that is the review gate.
+**Say:** "The post-commit hook fired `lore sync` on its own. Low-confidence goes to `drafts/` — that's the review gate."
 
-## Act 4 — Merge & Mechanism
+### Merge + share
 
 ```bash
-cd $DEMO
+cd /tmp/lore-demo
 git checkout -q -b feature && echo x > f.ts && git add -A && git -c user.email=d@x.com -c user.name=D commit -q -m "feat: f" 2>/dev/null
 git checkout -q master && echo y > g.ts && git add -A && git -c user.email=d@x.com -c user.name=D commit -q -m "feat: g" 2>/dev/null
 git merge feature 2>/dev/null || true
-$LORE reconcile
-$LORE share --out /tmp/lore-bundle.json
+$L reconcile
+$L share --out /tmp/lore-bundle.json
 ```
 
-**Say:** "When two maintainers (or two agents) both extend the wiki, Lore reconciles it —
-keeping both sides — and can hand the knowledge to another repo as a portable bundle."
+**Say:** "Two branches extended the wiki. Lore reconciled it, keeping both sides." 
 
-## Act 5 — Dogfood
+### Dogfood
 
 ```bash
 cat <LORE>/.lore/wiki/index.md
 ```
 
-Lore's own repository wiki contains ADRs written **by Lore, about building Lore** — the
-product proving itself on its own history.
+**Say:** "Lore's own repository wiki was written by Lore while we built Lore."
 
 ---
 
-## Optional extras
+## Notes for the presenter
 
-- **If you edit the capture plugin:** `cline plugin install --force` reuses the cached directory
-  (`~/.cline/plugins/_installed/local/<hash>`) and does NOT overwrite the file. Either
-  `cline plugin uninstall lore && cline plugin install ./packages/plugin`, or copy
-  `packages/plugin/src/index.ts` over the installed copy. Verify with
-  `grep -c inferenceInFlight <installed>/package/src/index.ts`.
-- **Live edit journey (watcher):** `lore watch` in one terminal, edit files in another →
-  `fs_batch` events capture the road, not just the destination.
-- **Old repo backfill:** `lore backfill --full` documents an existing repository's history.
-- **MCP / VS Code:** call `search_lore` from any MCP client (works in the VS Code Cline
-  extension, where plugins/hooks are not yet available) — see `packages/mcp/README.md`.
-- **Query:** `lore query dotenv`
+- **If the plugin was edited:** `cline plugin install --force` reuses its cached
+  directory and does NOT overwrite. Either `cline plugin uninstall lore && cline
+  plugin install ./packages/plugin`, or copy `packages/plugin/src/index.ts` over the
+  installed copy. `grep -c spawnDetachedCompile <installed>/package/src/index.ts`
+  tells you if the auto-compile build is installed.
+- **Watch the edit journey:** `lore watch` in one terminal, edit files in another.
+- **Old repositories:** `lore backfill --full` documents existing history.
+- **VS Code:** the plugin registers the Lore MCP server, so `search_lore` works
+  in the extension too (where hooks/plugins are unavailable).
+- **Ask it:** `lore query dotenv`

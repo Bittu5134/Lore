@@ -10,7 +10,8 @@
  * plugin; everything is wrapped in try/catch so capture can never break or
  * slow down the agent loop.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 function loreRoot(): string {
@@ -34,6 +35,7 @@ function inferenceInFlight(): boolean {
 interface LoreConfigLite {
   loreHome?: string;
   ignore?: string[];
+  autonomy?: "auto" | "draft" | "off";
 }
 
 function readLoreConfig(root: string): LoreConfigLite | null {
@@ -43,6 +45,48 @@ function readLoreConfig(root: string): LoreConfigLite | null {
     return null;
   }
 }
+
+/**
+ * Where `lore compile` can be run from. Known only after `lore init` recorded
+ * loreHome - we never guess, because a wrong path would make Cline run a
+ * random file on the user's machine.
+ */
+function compileCommand(root: string): { cmd: string; args: string[] } | null {
+  const home = readLoreConfig(root)?.loreHome;
+  if (!home) return null;
+  const entry = join(home, "packages", "cli", "src", "index.ts");
+  if (!existsSync(entry)) return null;
+  const tsx = join(home, "node_modules", ".bin", "tsx");
+  if (existsSync(tsx)) return { cmd: process.execPath, args: [tsx, entry, "compile"] };
+  return { cmd: "npx", args: ["--yes", "tsx", entry, "compile"] };
+}
+
+/**
+ * AUTO-COMPILE: the promise from the pitch. When a run ends, the session's
+ * captured evidence is distilled into a decision record without the user
+ * running anything. Detached + fail-open: the agent loop never waits, never
+ * breaks, and recursion is impossible (compile holds inference.lock while it
+ * invokes Cline, and we skip while the lock exists).
+ */
+function spawnDetachedCompile(root: string): void {
+  try {
+    const cmd = compileCommand(root);
+    if (!cmd) return;
+    const logPath = join(root, ".lore", "meta", "compile.log");
+    mkdirSync(join(root, ".lore", "meta"), { recursive: true });
+    const fd = openSync(logPath, "a");
+    const child = spawn(cmd.cmd, cmd.args, {
+      cwd: root,
+      detached: true,
+      stdio: ["ignore", fd, fd],
+      env: { ...process.env, LORE_ROOT: root },
+    });
+    child.unref();
+  } catch {
+    // fail-open
+  }
+}
+
 
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
   // (?<![A-Za-z0-9]) avoids mangling ordinary words such as "risk-management-…".
@@ -179,6 +223,8 @@ function toRecord(event: RuntimeEventLike): Record<string, unknown> | null {
 
 function capture(event: RuntimeEventLike): void {
   try {
+    const root = loreRoot();
+
     // Never record the events of Lore's own inference runs.
     if (process.env.LORE_INTERNAL || inferenceInFlight()) return;
 
@@ -193,8 +239,14 @@ function capture(event: RuntimeEventLike): void {
     const record = toRecord(event);
     if (!record) return;
     appendFileSync(join(rawDir(), "session.jsonl"), `${JSON.stringify(record)}\n`, "utf8");
+
+    // The run is over -> decisions write themselves. This is the whole point.
+    if (event.type === "run-finished" && !inferenceInFlight()) {
+      const config = readLoreConfig(root);
+      if (config && config.autonomy !== "off") spawnDetachedCompile(root);
+    }
   } catch {
-    // fail-open: capture must never block the agent loop
+    // fail-open: capture must never break or slow the agent loop
   }
 }
 

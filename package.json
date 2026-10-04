@@ -12,6 +12,7 @@
   },
   "scripts": {
     "lore": "tsx packages/cli/src/index.ts",
+    "demo": "node scripts/demo.mjs",
     "setup": "node scripts/setup.mjs",
     "build": "tsc -b packages/core packages/cli packages/mcp packages/plugin",
     "test": "tsx --test packages/core/test/*.test.ts",

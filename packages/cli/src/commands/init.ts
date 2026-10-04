@@ -159,6 +159,7 @@ export async function run(args: string[]): Promise<void> {
       `  store: ${join(root, LORE_PATHS.wiki, "..")}\n` +
       (installHooks ? `  hooks: git core.hooksPath -> ${LORE_PATHS.hooks}\n` : "") +
       `  rule:  ${LORE_PATHS.ruleFile}\n` +
-      `  next:  work normally, then run \`lore compile\` (commits sync automatically)\n`,
+      `  next:  just work normally — decisions write themselves (.lore/wiki/)\n` +
+      `  check: lore query <words>   ·   lore (dashboard)\n`,
   );
 }
