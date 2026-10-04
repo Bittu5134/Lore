@@ -80,12 +80,10 @@ test("parseDecisionJson ignores content after the JSON object", () => {
   assert.equal(raw.title, "First");
 });
 
-test("parseDecisionJson finds the decision after a [thinking] preamble", () => {
-  const raw = parseDecisionJson(
-    '[thinking] The user wants {"title": string, "context": string} distilled.\n' +
-      "[thinking] Let me look at the events.\n" +
-      '{"title":"Real Title","context":"ctx","decision":"dec"}',
-  );
+test("parseDecisionJson prefers the final answer over earlier candidates", () => {
+  const scratch = '{"title":"scratch note","context":"x","decision":"y"}';
+  const real = '{"title":"Real Title","context":"ctx","decision":"dec"}';
+  const raw = parseDecisionJson(`[thinking] step: ${scratch}\n[thinking] more\n${real}`);
   assert.equal(raw.title, "Real Title");
   assert.equal(raw.decision, "dec");
 });

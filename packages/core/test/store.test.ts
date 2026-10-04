@@ -99,3 +99,18 @@ test("drafts route writes to drafts/, not wiki/", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("writeAdr resolves id collisions from concurrent writers", () => {
+  const root = tempRoot();
+  try {
+    const store = createStore(root);
+    store.init();
+    const first = store.writeAdr(result);
+    const second = store.writeAdr(result); // same ADR-0001 again
+    assert.equal(first.id, "ADR-0001");
+    assert.equal(second.id, "ADR-0002");
+    assert.equal(store.listAdrs("wiki").length, 2);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

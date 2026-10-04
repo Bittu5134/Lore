@@ -16,7 +16,7 @@ import {
   type LoreSource,
   type LoreState,
 } from "./types.ts";
-import { formatAdrFilename, numericId, parseAdr, renderAdr } from "./adr.ts";
+import { formatAdrFilename, numericId, padId, parseAdr, renderAdr } from "./adr.ts";
 import { parseEventsJsonl, serializeEvent, sortEvents } from "./events.ts";
 
 export interface SearchHit {
@@ -190,16 +190,31 @@ export function createStore(root: string): LoreStore {
   }
 
   function writeAdr(result: CompileResult): { id: string; path: string } {
-    const rel = join(dirRel(result.route), formatAdrFilename(result.adr));
+    // Resolve id collisions (concurrent writers, e.g. the post-commit hook
+    // overlapping a manual `lore sync`) by allocating the next free id.
+    const taken = new Set(allAdrFrontmatter().map((a) => a.id));
+    let adr = result.adr;
+    if (taken.has(adr.frontmatter.id)) {
+      let n = numericId(adr.frontmatter.id);
+      while (taken.has(padId(n))) n += 1;
+      const newId = padId(n);
+      adr = {
+        ...adr,
+        frontmatter: { ...adr.frontmatter, id: newId },
+        body: adr.body.replace(`# ${result.adr.frontmatter.id}:`, `# ${newId}:`),
+      };
+    }
+
+    const rel = join(dirRel(result.route), formatAdrFilename(adr));
     mkdirSync(abs(dirRel(result.route)), { recursive: true });
-    writeFileSync(abs(rel), renderAdr(result.adr), "utf8");
+    writeFileSync(abs(rel), renderAdr(adr), "utf8");
     const state = readState();
     writeState({
       ...state,
-      nextAdrId: Math.max(state.nextAdrId, numericId(result.adr.frontmatter.id) + 1),
+      nextAdrId: Math.max(state.nextAdrId, numericId(adr.frontmatter.id) + 1),
     });
     regenerateIndex();
-    return { id: result.adr.frontmatter.id, path: rel };
+    return { id: adr.frontmatter.id, path: rel };
   }
 
   function searchAdrs(query: string, limit = 5): SearchHit[] {

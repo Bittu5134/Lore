@@ -99,7 +99,7 @@ function repairControlChars(input: string): string {
   return out;
 }
 
-/** Collect balanced {...} objects starting at each `{`, outermost first. */
+/** Collect balanced {...} objects that could be a decision record. */
 function extractJsonCandidates(text: string): string[] {
   const candidates: string[] = [];
   for (let start = 0; start < text.length; start += 1) {
@@ -120,12 +120,13 @@ function extractJsonCandidates(text: string): string[] {
       else if (ch === "}") {
         depth -= 1;
         if (depth === 0) {
-          candidates.push(text.slice(start, i + 1));
+          const slice = text.slice(start, i + 1);
+          // cheap prefilter: only objects that mention a decision key
+          if (slice.includes('"title"') || slice.includes('"decision"')) candidates.push(slice);
           break;
         }
       }
     }
-    if (candidates.length >= 64) break;
   }
   return candidates;
 }
@@ -139,16 +140,17 @@ function looksLikeDecision(value: unknown): value is RawDecision {
 export function parseDecisionJson(text: string): RawDecision {
   const withoutFences = text.replace(/```json/gi, "```").replace(/```/g, "");
 
-  // `cline -p` prints its [thinking] stream to stdout, so the final answer is not
-  // the first JSON-looking fragment. Try every candidate object and keep the
-  // first one that is valid JSON and looks like a decision record.
-  for (const candidate of extractJsonCandidates(withoutFences)) {
+  // `cline -p` prints its [thinking] stream to stdout and the thinking often
+  // quotes the requested JSON schema, so the FIRST valid-looking object is not
+  // the answer. Try candidates from the END (the final answer comes last).
+  const candidates = extractJsonCandidates(withoutFences);
+  for (const candidate of candidates.reverse()) {
     for (const attempt of [candidate, repairControlChars(candidate)]) {
       try {
         const parsed: unknown = JSON.parse(attempt);
         if (looksLikeDecision(parsed)) return parsed;
       } catch {
-        // try the repaired/next candidate
+        // try the repaired / next candidate
       }
     }
   }
