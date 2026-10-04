@@ -1,5 +1,34 @@
-#!/usr/bin/env bash
-# lore CLI shim - runs the TypeScript entry point through tsx without a build step.
-set -euo pipefail
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec npx --yes tsx "$DIR/../src/index.ts" "$@"
+#!/usr/bin/env node
+/**
+ * Cross-platform `lore` launcher.
+ *
+ * Prefers the repo-local tsx binary (works offline, no npx fetch) and falls
+ * back to `npx --yes tsx` when the repo has not been `npm install`ed yet.
+ */
+const { spawnSync } = require("node:child_process");
+const path = require("node:path");
+const fs = require("node:fs");
+
+const here = path.dirname(fs.realpathSync(__filename));
+const entry = path.join(here, "..", "src", "index.ts");
+const args = process.argv.slice(2);
+const binDir = path.join(here, "..", "..", "..", "node_modules", ".bin");
+const isWin = process.platform === "win32";
+
+function run(cmd, cmdArgs) {
+  return spawnSync(cmd, cmdArgs, { stdio: "inherit", shell: isWin });
+}
+
+const localTsx = [path.join(binDir, "tsx"), path.join(binDir, "tsx.cmd")].find((p) => fs.existsSync(p));
+
+let result;
+if (localTsx && localTsx.endsWith(".cmd")) {
+  result = run(localTsx, [entry, ...args]);
+} else if (localTsx) {
+  // npm's .bin/tsx is a node script with a shebang - run it with this node.
+  result = run(process.execPath, [localTsx, entry, ...args]);
+} else {
+  result = run("npx", ["--yes", "tsx", entry, ...args]);
+}
+
+process.exit(typeof result.status === "number" ? result.status : 1);

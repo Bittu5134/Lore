@@ -74,19 +74,25 @@ export async function run(args: string[]): Promise<void> {
   log(`lore: captured ${events.length} commit(s)`);
 
   const compiler = createClineCompiler(store.readConfig());
-  const result = await compiler.compile({
+  const results = await compiler.compile({
     events,
     repoRoot: root,
     existing: store.allAdrFrontmatter(),
     reason: `git commit(s) ${commits.map((c) => c.slice(0, 8)).join(", ")}`,
   });
-  const written = store.writeAdr(result);
 
   const head = commits[commits.length - 1];
   if (head) store.writeState({ ...store.readState(), lastCommit: head });
 
-  log(
-    `lore: ${written.id} (confidence ${result.confidence.toFixed(2)}) -> ${written.path}` +
-      `${result.route === "drafts" ? "  [draft - needs review]" : ""}`,
-  );
+  if (results.length === 0) {
+    log("lore: no architectural decision in these commits (nothing recorded)");
+    return;
+  }
+  for (const result of results) {
+    const written = store.writeAdr(result);
+    log(
+      `lore: ${written.id} (confidence ${result.confidence.toFixed(2)}) -> ${written.path}` +
+        `${result.route === "drafts" ? "  [draft - needs review]" : ""}`,
+    );
+  }
 }

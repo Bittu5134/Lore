@@ -4,15 +4,49 @@
  * Lane 0 (shared infrastructure): every other lane assumes these paths exist.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_CONFIG, DEFAULT_STATE, LORE_PATHS } from "@lore/core";
+import { createStore, LORE_PATHS } from "@lore/core";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** packages/cli/src/commands -> packages/cli/src/index.ts */
 const CLI_ENTRY = resolve(HERE, "..", "index.ts");
-const TEMPLATE_FIXTURE = resolve(HERE, "..", "..", "..", "core", "fixtures", "adr-template.md");
+/** packages/cli/src/commands -> <repo>/node_modules/.bin/tsx (offline hook fallback). */
+const TSX_BIN = resolve(HERE, "..", "..", "..", "..", "node_modules", ".bin", "tsx");
+
+/**
+ * The continuity rule, embedded so `lore init` works no matter how lore was
+ * installed (clone, npm link, global) - never read from a repo-relative path.
+ */
+const RULE_TEXT = `# Lore — Architectural Memory
+
+\`.lore/\` holds the WHY behind this repository's code: architectural decision
+records (ADRs) in \`.lore/wiki/ADR-*.md\`.
+
+## Before you edit code
+
+1. Read \`.lore/wiki/index.md\`.
+2. If a \`search_lore\` tool is available, search for the files and concepts you are
+   about to touch. Otherwise read the 2-3 ADRs whose titles or tags match your
+   task. Read at most 3 - respect the context budget.
+3. If an ADR covers your area, follow it. To contradict it, say explicitly in
+   your final answer which ADR you are superseding and why.
+
+## While you work
+
+4. When you make a non-obvious choice (a library, a pattern, a data structure, a
+   trade-off), record it: call the \`record_decision\` tool if available, or write
+   an ADR to \`.lore/drafts/\` using \`.lore/wiki/ADR-0000-template.md\`. Always
+   include the alternatives you rejected and the reason - that is the most
+   valuable part.
+5. Never edit \`.lore/raw/\` (immutable evidence) or \`.lore/meta/\` (bookkeeping).
+
+## At the end
+
+6. State which ADRs you consulted and what you recorded.
+`;
+
 
 function repoRoot(): string {
   try {
@@ -32,82 +66,91 @@ function writeIfAbsent(path: string, content: string, mode?: number): boolean {
   return true;
 }
 
-function hookScript(reason: string, command: string): string {
+function hookScript(hook: string, command: string): string {
   return `#!/bin/sh
-# Lore ${reason} hook (installed by \`lore init\`).
-# Runs synchronously so the wiki is updated the moment the event happens.
-# Set LORE_HOOK_ASYNC=1 to detach instead.
-if [ -n "\${LORE_HOOK_ASYNC:-}" ]; then
-  npx --yes tsx "${CLI_ENTRY}" ${command} >/dev/null 2>&1 &
+# Lore ${hook} hook (installed by \`lore init\`).
+# Resolution order: lore on PATH -> repo-local tsx (works offline) -> npx tsx.
+# Set LORE_HOOK_ASYNC=1 to detach instead of waiting for the model call.
+if command -v lore >/dev/null 2>&1; then
+  LORE_CMD="lore"
+elif [ -x "${TSX_BIN}" ]; then
+  LORE_CMD="${TSX_BIN} ${CLI_ENTRY}"
 else
-  npx --yes tsx "${CLI_ENTRY}" ${command} || true
+  LORE_CMD="npx --yes tsx ${CLI_ENTRY}"
+fi
+if [ -n "\${LORE_HOOK_ASYNC:-}" ]; then
+  (\$LORE_CMD ${command} >/dev/null 2>&1 &)
+else
+  (\$LORE_CMD ${command} >/dev/null 2>&1 || true)
 fi
 exit 0
 `;
 }
 
-export async function run(_args: string[]): Promise<void> {
+export async function run(args: string[]): Promise<void> {
   const root = repoRoot();
+  const installHooks = !args.includes("--no-hooks");
   process.stdout.write(`lore: initialising in ${root}\n`);
 
+  // Store: dirs, config, state, ADR template, index (idempotent).
+  createStore(root).init();
+
   const created: string[] = [];
-  for (const dir of [
-    LORE_PATHS.raw,
-    LORE_PATHS.wiki,
-    LORE_PATHS.drafts,
-    LORE_PATHS.meta,
-    LORE_PATHS.hooks,
-  ]) {
-    mkdirSync(join(root, dir), { recursive: true });
-  }
 
-  if (writeIfAbsent(join(root, LORE_PATHS.config), JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n"))
-    created.push(LORE_PATHS.config);
-  if (writeIfAbsent(join(root, LORE_PATHS.state), JSON.stringify(DEFAULT_STATE, null, 2) + "\n"))
-    created.push(LORE_PATHS.state);
+  // Continuity rule - embedded text, so this works for any install method.
+  const rulePath = join(root, LORE_PATHS.ruleFile);
+  mkdirSync(dirname(rulePath), { recursive: true });
+  if (writeIfAbsent(rulePath, RULE_TEXT)) created.push(LORE_PATHS.ruleFile);
 
-  const template = existsSync(TEMPLATE_FIXTURE)
-    ? readFileSync(TEMPLATE_FIXTURE, "utf8")
-    : "# ADR template unavailable\n";
-  if (writeIfAbsent(join(root, LORE_PATHS.wiki, "ADR-0000-template.md"), template))
-    created.push("wiki/ADR-0000-template.md");
-  if (
-    writeIfAbsent(
-      join(root, LORE_PATHS.wiki, "index.md"),
-      "# Lore Wiki Index\n\n_Generated. Regenerate with `lore compile`._\n\n| ID | Title | Status | Confidence |\n|----|-------|--------|------------|\n",
-    )
-  )
-    created.push("wiki/index.md");
+  if (installHooks) {
+    // Hooks live in .lore/hooks (committed with the repo) and are activated via core.hooksPath.
+    mkdirSync(join(root, LORE_PATHS.hooks), { recursive: true });
+    const hooks = [
+      ["post-commit", "sync --auto"],
+      ["post-merge", "reconcile"],
+    ] as const;
+    for (const [hook, command] of hooks) {
+      const path = join(root, LORE_PATHS.hooks, hook);
+      if (writeIfAbsent(path, hookScript(hook, command), 0o755)) created.push(`hooks/${hook}`);
+    }
 
-  // Git hooks -> committed inside .lore/hooks, activated via core.hooksPath.
-  const hooks: Array<[string, string, string]> = [
-    ["post-commit", "post-commit", "sync --auto"],
-    ["post-merge", "post-merge", "reconcile"],
-  ];
-  for (const [name, reason, command] of hooks) {
-    const p = join(root, LORE_PATHS.hooks, name);
-    if (writeIfAbsent(p, hookScript(reason, command), 0o755)) created.push(`hooks/${name}`);
-  }
-  try {
-    execFileSync("git", ["config", "core.hooksPath", LORE_PATHS.hooks], {
-      cwd: root,
-      stdio: "ignore",
-    });
-  } catch {
-    process.stderr.write("lore: warning: could not set git core.hooksPath (not a git repo?)\n");
-  }
+    // Never silently clobber someone else's hooks (husky, lefthook, ...).
+    let previous = "";
+    try {
+      previous = execFileSync("git", ["config", "core.hooksPath"], {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {
+      previous = "";
+    }
+    if (previous !== "" && previous !== LORE_PATHS.hooks) {
+      writeFileSync(join(root, LORE_PATHS.meta, "previous-hooks-path.txt"), `${previous}\n`, "utf8");
+      process.stdout.write(
+        `lore: note: replaced existing core.hooksPath "${previous}"\n` +
+          `      saved to .lore/meta/previous-hooks-path.txt\n` +
+          `      restore with: git config core.hooksPath ${previous}\n`,
+      );
+    }
 
-  // Continuity rule for Cline (and any agent that reads .clinerules).
-  const ruleSource = resolve(HERE, "..", "..", "..", "..", ".clinerules", "lore.md");
-  if (existsSync(ruleSource)) {
-    mkdirSync(dirname(join(root, LORE_PATHS.ruleFile)), { recursive: true });
-    if (writeIfAbsent(join(root, LORE_PATHS.ruleFile), readFileSync(ruleSource, "utf8")))
-      created.push(LORE_PATHS.ruleFile);
+    try {
+      execFileSync("git", ["config", "core.hooksPath", LORE_PATHS.hooks], {
+        cwd: root,
+        stdio: "ignore",
+      });
+    } catch {
+      process.stderr.write("lore: warning: could not set git core.hooksPath (not a git repo?)\n");
+    }
+  } else {
+    process.stdout.write("lore: skipped git hooks (--no-hooks)\n");
   }
 
   process.stdout.write(
-    `lore: ready (${created.length} files created)\n` +
+    `lore: ready${created.length > 0 ? ` (${created.length} file(s) created)` : " (store already present)"}\n` +
       `  store: ${join(root, LORE_PATHS.wiki, "..")}\n` +
-      `  hooks: git core.hooksPath -> ${LORE_PATHS.hooks}\n`,
+      (installHooks ? `  hooks: git core.hooksPath -> ${LORE_PATHS.hooks}\n` : "") +
+      `  rule:  ${LORE_PATHS.ruleFile}\n` +
+      `  next:  work normally, then run \`lore compile\` (commits sync automatically)\n`,
   );
 }

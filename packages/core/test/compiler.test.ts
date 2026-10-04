@@ -34,21 +34,57 @@ function fakeInfer(confidence = 0.9): { fn: (prompt: string) => string; prompt: 
 test("compiles captured events into an ADR routed to the wiki", async () => {
   const fake = fakeInfer(0.9);
   const compiler = createClineCompiler(DEFAULT_CONFIG, { infer: fake.fn });
-  const result = await compiler.compile({ events, repoRoot: "/tmp/lore-test" });
+  const [result] = await compiler.compile({ events, repoRoot: "/tmp/lore-test" });
 
+  assert.ok(result);
   assert.equal(result.route, "wiki");
   assert.equal(result.adr.frontmatter.id, "ADR-0001");
   assert.equal(result.adr.frontmatter.status, "accepted");
   assert.match(result.adr.body, /## Alternatives considered/);
   assert.match(result.adr.body, /dotenv/);
   assert.match(fake.prompt(), /EVENTS CAPTURED:/);
+  assert.match(fake.prompt(), /EXISTING DECISIONS/);
 });
 
 test("low confidence routes to drafts", async () => {
   const compiler = createClineCompiler(DEFAULT_CONFIG, { infer: fakeInfer(0.2).fn });
-  const result = await compiler.compile({ events, repoRoot: "/tmp/lore-test" });
+  const [result] = await compiler.compile({ events, repoRoot: "/tmp/lore-test" });
+  assert.ok(result);
   assert.equal(result.route, "drafts");
   assert.equal(result.adr.frontmatter.status, "draft");
+});
+
+test("allocates consecutive ids across multiple decisions in one run", async () => {
+  const envelope = JSON.stringify({
+    decisions: [
+      { title: "First", context: "c", decision: "d", confidence: 0.9, alternatives: [] },
+      { title: "Second", context: "c", decision: "d", confidence: 0.9, alternatives: [] },
+    ],
+  });
+  const compiler = createClineCompiler(DEFAULT_CONFIG, { infer: () => envelope });
+  const results = await compiler.compile({ events, repoRoot: "/tmp/lore-test" });
+  assert.equal(results.length, 2);
+  assert.equal(results[0]?.adr.frontmatter.id, "ADR-0001");
+  assert.equal(results[1]?.adr.frontmatter.id, "ADR-0002");
+});
+
+test("records nothing when the events carry no architectural reasoning", async () => {
+  const compiler = createClineCompiler(DEFAULT_CONFIG, { infer: () => '{"decisions":[]}' });
+  const results = await compiler.compile({ events, repoRoot: "/tmp/lore-test" });
+  assert.deepEqual(results, []);
+});
+
+test("a supersedes link becomes its own section", async () => {
+  const envelope = JSON.stringify({
+    decisions: [
+      { title: "Use SQLite for the event store", context: "c", decision: "d", confidence: 0.9, alternatives: [], supersedes: "ADR-0003" },
+    ],
+  });
+  const compiler = createClineCompiler(DEFAULT_CONFIG, { infer: () => envelope });
+  const [result] = await compiler.compile({ events, repoRoot: "/tmp/lore-test" });
+  assert.ok(result);
+  assert.match(result.adr.body, /## Supersedes/);
+  assert.match(result.adr.body, /ADR-0003/);
 });
 
 test("allocates the next id from existing ADRs", async () => {
@@ -56,7 +92,8 @@ test("allocates the next id from existing ADRs", async () => {
     { id: "ADR-0007", title: "x", status: "accepted", date: "2026-01-01", confidence: 1, sources: [], tags: [] },
   ];
   const compiler = createClineCompiler(DEFAULT_CONFIG, { infer: fakeInfer().fn });
-  const result = await compiler.compile({ events, repoRoot: "/tmp/lore-test", existing });
+  const [result] = await compiler.compile({ events, repoRoot: "/tmp/lore-test", existing });
+  assert.ok(result);
   assert.equal(result.adr.frontmatter.id, "ADR-0008");
 });
 

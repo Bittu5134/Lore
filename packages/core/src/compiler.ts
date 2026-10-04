@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Adr, CompileInput, CompileResult, Compiler, LoreConfig } from "./types.ts";
+import type { Adr, AdrFrontmatter, CompileInput, CompileResult, Compiler, LoreConfig } from "./types.ts";
 import { numericId, padId } from "./adr.ts";
 import { renderTranscript } from "./events.ts";
 
@@ -20,21 +20,27 @@ export interface CompilerOptions {
   now?: () => Date;
 }
 
-export const DECISION_JSON_SHAPE = `{"title": string, "context": string, "decision": string, "alternatives": string[], "consequences": string, "confidence": number, "tags": string[], "sources": string[]}`;
+export const DECISION_JSON_SHAPE = `{"decisions":[{"title": string, "context": string, "decision": string, "alternatives": string[], "consequences": string, "confidence": number, "tags": string[], "supersedes": string | null}]}`;
 
 const PROMPT_HEADER = [
-  "You are Lore, an architectural-decision recorder.",
-  "Below are events captured from a development session (an AI agent's reasoning and tool use, and/or git commits).",
-  "Distil them into ONE architectural decision record that captures the WHY: the context that forced a decision,",
-  "the decision itself, and the alternatives that were considered and rejected.",
+  "You are Lore, an architectural-decision recorder for a software repository.",
+  "You will receive EVENTS captured while code was being written: an AI agent's reasoning and tool activity,",
+  "and/or git commits with diffs. Distil them into decision records that capture WHY - the part that diffs",
+  "and commit messages never show.",
   "",
   "Rules:",
-  "- Base every claim on the events. Never invent facts. If the evidence is thin, lower your confidence.",
-  '- "alternatives" lists options that were considered or implied and NOT chosen, with the reason.',
-  "- confidence is 0..1: how certain you are that this ADR faithfully captures the reasoning.",
-  "- Prefer a specific, imperative title.",
+  "- Emit up to 3 decisions, most significant first.",
+  "- Emit an EMPTY array when the events contain no architectural reasoning (formatting, typos, generated",
+  "  files, dependency bumps, routine refactors). Silence is better than noise.",
+  "- Base every claim on the events. Never invent facts. Thin evidence -> lower confidence.",
+  '- "alternatives": options that were considered and REJECTED, each with the reason. Use [] if none appear.',
+  '- "supersedes": the id of an EXISTING decision (listed below) that this change replaces, else null.',
+  "  Never duplicate a decision that is already recorded.",
+  "- title: imperative and specific, 80 characters or fewer.",
+  "- confidence: 0..1 - how certain you are the record faithfully captures the reasoning.",
+  "- Escape newlines inside strings as \\n. Output valid JSON only.",
   "",
-  "Respond with a single JSON object and NOTHING else (no prose, no fences):",
+  "Respond with a single JSON object and NOTHING else (no prose, no code fences):",
   DECISION_JSON_SHAPE,
 ].join("\n");
 
@@ -47,6 +53,7 @@ interface RawDecision {
   confidence?: unknown;
   tags?: unknown;
   sources?: unknown;
+  supersedes?: unknown;
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -58,9 +65,19 @@ function asStringArray(value: unknown): string[] {
   return value.map((v) => asString(v)).filter((v) => v !== "");
 }
 
-export function buildPrompt(transcript: string, reason?: string): string {
+export function buildPrompt(
+  transcript: string,
+  existing: AdrFrontmatter[] = [],
+  reason?: string,
+): string {
+  const existingList =
+    existing.length > 0 ? existing.map((a) => `- ${a.id}: ${a.title}`).join("\n") : "(none)";
   const header = reason ? `${PROMPT_HEADER}\n\nTrigger: ${reason}` : PROMPT_HEADER;
-  return `${header}\n\nEVENTS CAPTURED:\n${transcript.slice(0, 12000)}`;
+  return (
+    `${header}\n\n` +
+    `EXISTING DECISIONS (do not duplicate; supersede if replaced):\n${existingList}\n\n` +
+    `EVENTS CAPTURED:\n${transcript.slice(0, 12000)}`
+  );
 }
 
 function repairControlChars(input: string): string {
@@ -124,7 +141,13 @@ function extractJsonCandidates(text: string): string[] {
         if (depth === 0) {
           const slice = text.slice(start, i + 1);
           // cheap prefilter: only objects that mention a decision key
-          if (slice.includes('"title"') || slice.includes('"decision"')) candidates.push(slice);
+          if (
+            slice.includes('"title"') ||
+            slice.includes('"decision"') ||
+            slice.includes('"decisions"')
+          ) {
+            candidates.push(slice);
+          }
           break;
         }
       }
@@ -139,27 +162,56 @@ function looksLikeDecision(value: unknown): value is RawDecision {
   return "title" in record || "decision" in record || "context" in record;
 }
 
-export function parseDecisionJson(text: string): RawDecision {
+/**
+ * Parse the model's reply into decision records. Accepts either the v2 envelope
+ * `{"decisions":[...]}`, a bare array, or a single legacy object.
+ *
+ * `cline -p` prints its [thinking] stream to stdout and the thinking often quotes
+ * the requested JSON schema, so the FIRST valid-looking fragment is not the
+ * answer - we try candidates from the END (the final answer comes last).
+ */
+export function parseDecisionsJson(text: string): RawDecision[] {
   const withoutFences = text.replace(/```json/gi, "```").replace(/```/g, "");
-
-  // `cline -p` prints its [thinking] stream to stdout and the thinking often
-  // quotes the requested JSON schema, so the FIRST valid-looking object is not
-  // the answer. Try candidates from the END (the final answer comes last).
   const candidates = extractJsonCandidates(withoutFences);
+
+  // Scan from the end (the answer comes last). Prefer a `{"decisions":[...]}`
+  // envelope over bare objects: nested decision objects appear *after* the
+  // envelope in the text, so they must not win the race.
+  let fallback: RawDecision[] | null = null;
+
   for (const candidate of candidates.reverse()) {
     for (const attempt of [candidate, repairControlChars(candidate)]) {
+      let parsed: unknown;
       try {
-        const parsed: unknown = JSON.parse(attempt);
-        if (looksLikeDecision(parsed)) return parsed;
+        parsed = JSON.parse(attempt);
       } catch {
-        // try the repaired / next candidate
+        continue; // try the repaired / next candidate
+      }
+      if (typeof parsed !== "object" || parsed === null) continue;
+
+      const record = parsed as Record<string, unknown>;
+      if (Array.isArray(record.decisions)) {
+        // Envelope wins - including an intentionally EMPTY array (no decisions).
+        return record.decisions.filter(looksLikeDecision);
+      }
+      if (fallback === null && looksLikeDecision(parsed)) {
+        fallback = [parsed as RawDecision];
       }
     }
   }
 
+  if (fallback !== null) return fallback;
   throw new Error(
     `inference did not return a decision object | raw: ${text.slice(0, 300)}`,
   );
+}
+
+/** Convenience for callers/tests that expect exactly one decision. */
+export function parseDecisionJson(text: string): RawDecision {
+  const decisions = parseDecisionsJson(text);
+  const first = decisions[0];
+  if (!first) throw new Error(`inference returned no decisions | raw: ${text.slice(0, 300)}`);
+  return first;
 }
 
 function derivedSources(input: CompileInput): string[] {
@@ -179,12 +231,13 @@ function buildBody(opts: {
   alternatives: string[];
   consequences: string;
   sources: string[];
+  supersedes?: string;
 }): string {
   const alts =
     opts.alternatives.length > 0
       ? opts.alternatives.map((a) => `- ${a}`).join("\n")
       : "- (no alternatives were recorded in the captured events)";
-  return [
+  const sections = [
     `# ${opts.id}: ${opts.title}`,
     "",
     "## Context",
@@ -202,9 +255,12 @@ function buildBody(opts: {
     "## Consequences",
     "",
     opts.consequences || "(not captured)",
-    "",
-    `<!-- SOURCES: ${opts.sources.join(", ") || "none"} -->`,
-  ].join("\n");
+  ];
+  if (opts.supersedes) {
+    sections.push("", "## Supersedes", "", opts.supersedes);
+  }
+  sections.push("", `<!-- SOURCES: ${opts.sources.join(", ") || "none"} -->`);
+  return sections.join("\n");
 }
 
 function defaultInfer(config: LoreConfig): InferenceFn {
@@ -250,48 +306,56 @@ export function createClineCompiler(config: LoreConfig, options: CompilerOptions
   const now = options.now ?? (() => new Date());
 
   return {
-    async compile(input: CompileInput): Promise<CompileResult> {
+    async compile(input: CompileInput): Promise<CompileResult[]> {
       if (input.events.length === 0) throw new Error("nothing to compile: no events");
 
       const transcript = renderTranscript(input.events);
-      const raw = parseDecisionJson(infer(buildPrompt(transcript, input.reason), input.repoRoot));
+      const existing = input.existing ?? [];
+      const decisions = parseDecisionsJson(
+        infer(buildPrompt(transcript, existing, input.reason), input.repoRoot),
+      );
 
-      const maxExisting = Math.max(0, ...(input.existing ?? []).map((a) => numericId(a.id)));
-      const id = padId(maxExisting + 1);
+      // No architectural reasoning in the events -> record nothing (never spam the wiki).
+      if (decisions.length === 0) return [];
 
-      const confidenceRaw = Number(raw.confidence);
-      const confidence = Number.isFinite(confidenceRaw)
-        ? Math.min(1, Math.max(0, confidenceRaw))
-        : 0.5;
-      const route: "wiki" | "drafts" =
-        config.autonomy === "auto" && confidence >= config.confidenceThreshold ? "wiki" : "drafts";
+      const maxExisting = Math.max(0, ...existing.map((a) => numericId(a.id)));
 
-      const sources = [...new Set([...asStringArray(raw.sources), ...derivedSources(input)])];
-      const title = asString(raw.title, "Untitled decision");
-      const body = buildBody({
-        id,
-        title,
-        context: asString(raw.context),
-        decision: asString(raw.decision),
-        alternatives: asStringArray(raw.alternatives),
-        consequences: asString(raw.consequences),
-        sources,
-      });
-
-      const adr: Adr = {
-        frontmatter: {
+      return decisions.slice(0, 3).map((raw, index) => {
+        const id = padId(maxExisting + index + 1);
+        const confidenceRaw = Number(raw.confidence);
+        const confidence = Number.isFinite(confidenceRaw)
+          ? Math.min(1, Math.max(0, confidenceRaw))
+          : 0.5;
+        const route: "wiki" | "drafts" =
+          config.autonomy === "auto" && confidence >= config.confidenceThreshold ? "wiki" : "drafts";
+        const sources = [...new Set([...asStringArray(raw.sources), ...derivedSources(input)])];
+        const title = asString(raw.title, "Untitled decision");
+        const body = buildBody({
           id,
           title,
-          status: route === "wiki" ? "accepted" : "draft",
-          date: now().toISOString().slice(0, 10),
-          confidence,
+          context: asString(raw.context),
+          decision: asString(raw.decision),
+          alternatives: asStringArray(raw.alternatives),
+          consequences: asString(raw.consequences),
           sources,
-          tags: asStringArray(raw.tags),
-        },
-        body,
-      };
+          supersedes: asString(raw.supersedes),
+        });
 
-      return { adr, confidence, route };
+        const adr: Adr = {
+          frontmatter: {
+            id,
+            title,
+            status: route === "wiki" ? "accepted" : "draft",
+            date: now().toISOString().slice(0, 10),
+            confidence,
+            sources,
+            tags: asStringArray(raw.tags),
+          },
+          body,
+        };
+
+        return { adr, confidence, route };
+      });
     },
   };
 }

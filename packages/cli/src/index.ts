@@ -43,7 +43,19 @@ Commands:
   doctor                    Diagnose the Lore installation
 `;
 
+function assertNode(): void {
+  const major = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
+  if (!Number.isFinite(major) || major < 22) {
+    process.stderr.write(
+      `lore: Node ${process.versions.node} is too old - Lore needs Node 22 or newer\n` +
+        `      (recursive fs.watch, node:test). Install from https://nodejs.org\n`,
+    );
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
+  assertNode();
   const argv = process.argv.slice(2);
   const cmd = argv[0];
   const rest = argv.slice(1);

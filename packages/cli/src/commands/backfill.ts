@@ -33,17 +33,20 @@ export async function run(args: string[]): Promise<void> {
     const events: LoreEvent[] = batch.map((sha) => commitToEvent(root, sha));
     store.appendEvents(events);
 
-    const result = await compiler.compile({
+    const results = await compiler.compile({
       events,
       repoRoot: root,
       existing: store.allAdrFrontmatter(),
       reason: `backfill ${batch[0]?.slice(0, 8)}..${batch[batch.length - 1]?.slice(0, 8)}`,
     });
-    const written = store.writeAdr(result);
-    process.stdout.write(
-      `  [${Math.min(i + BATCH_SIZE, commits.length)}/${commits.length}] ` +
-        `${written.id} (confidence ${result.confidence.toFixed(2)})\n`,
-    );
+    const progress = `  [${Math.min(i + BATCH_SIZE, commits.length)}/${commits.length}]`;
+    if (results.length === 0) {
+      process.stdout.write(`${progress} no architectural decision (skipped)\n`);
+    }
+    for (const result of results) {
+      const written = store.writeAdr(result);
+      process.stdout.write(`${progress} ${written.id} (confidence ${result.confidence.toFixed(2)})\n`);
+    }
 
     const head = batch[batch.length - 1];
     if (head) store.writeState({ ...store.readState(), lastCommit: head });

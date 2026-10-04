@@ -3,6 +3,14 @@ dist/
 *.tsbuildinfo
 .DS_Store
 
-# Lore note: .lore/ IS committed on purpose - it is the shared knowledge base.
-# Only local session scratch state is ignored here:
-.lore/raw/*.tmp
+# The curated, shareable knowledge IS committed: .lore/wiki/ (ADRs) and
+# .lore/drafts/, plus .lore/config.json and .lore/hooks/.
+#
+# Raw evidence logs are LOCAL by design: they are large, high-churn, and would
+# bloat git history forever (hundreds of MB over a project's life). They stay on
+# the machine that produced them; the ADRs carry the shareable knowledge.
+.lore/raw/
+
+# Local bookkeeping that must not be shared (machine-specific cursors/locks).
+.lore/meta/inference.lock
+.lore/meta/previous-hooks-path.txt

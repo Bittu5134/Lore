@@ -6,7 +6,7 @@
  * parallel and integrate against exactly these definitions.
  */
 
-export const CONTRACTS_VERSION = 1;
+export const CONTRACTS_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // On-disk layout of the .lore store
@@ -211,7 +211,14 @@ export interface CompileResult {
 }
 
 export interface Compiler {
-  compile(input: CompileInput): Promise<CompileResult>;
+  /**
+   * Distil captured events into decision records.
+   *
+   * Returns one result per distinct decision found, most significant first, and
+   * an EMPTY array when the events carry no architectural reasoning (so routine
+   * commits do not pollute the wiki). v2: was a single CompileResult.
+   */
+  compile(input: CompileInput): Promise<CompileResult[]>;
 }
 
 // ---------------------------------------------------------------------------
