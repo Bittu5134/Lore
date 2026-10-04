@@ -57,13 +57,41 @@ test("appendEvents + readEvents round-trip through the raw layer", () => {
     const events = store.readEvents();
     assert.equal(events.length, 1);
     assert.equal(events[0]?.sessionId, "s1");
-    assert.ok(existsSync(join(root, ".lore/raw/session.jsonl")));
+    // partitions are named YYYY-MM-<source>.jsonl
+    assert.ok(existsSync(join(root, ".lore/raw/2026-10-session.jsonl")));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("writeAdr lands in wiki, updates index + state, and is findable", () => {
+test("raw events are partitioned by month and a cursor skips old months", () => {
+  const root = tempRoot();
+  try {
+    const store = createStore(root);
+    store.init();
+
+    const oldEvent: LoreEvent = {
+      ts: "2025-01-05T00:00:00.000Z",
+      source: "git-commit",
+      kind: "commit",
+      commit: "deadbeef",
+      payload: { message: "an old commit" },
+    };
+    const newEvent: LoreEvent = { ...event, ts: "2026-10-05T00:00:00.000Z" };
+    store.appendEvents([oldEvent, newEvent]);
+
+    const rawDir = join(root, ".lore/raw");
+    assert.ok(existsSync(join(rawDir, "2025-01-commits.jsonl")));
+    assert.ok(existsSync(join(rawDir, "2026-10-session.jsonl")));
+
+    assert.equal(store.readEvents().length, 2);
+    assert.equal(store.readEvents({ since: "2026-01-01T00:00:00.000Z" }).length, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("writeAdr lands in wiki and is findable (index is built on demand)", () => {
   const root = tempRoot();
   try {
     const store = createStore(root);
@@ -73,9 +101,51 @@ test("writeAdr lands in wiki, updates index + state, and is findable", () => {
     assert.ok(existsSync(join(root, written.path)));
     assert.equal(store.readAdr("ADR-0001")?.frontmatter.title, adr.frontmatter.title);
     assert.equal(store.readState().nextAdrId, 2);
+    // The index is deliberately NOT rewritten on every ADR write (docs/scaling.md):
+    // regenerateIndex() (or `lore index`) does it once per run.
+    store.regenerateIndex();
     assert.match(readFileSync(join(root, ".lore/wiki/index.md"), "utf8"), /ADR-0001/);
     assert.equal(store.searchAdrs("dotenv")[0]?.adrId, "ADR-0001");
     assert.equal(store.allAdrFrontmatter().length, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("promoteAdr moves a draft into the wiki as an accepted ADR", () => {
+  const root = tempRoot();
+  try {
+    const store = createStore(root);
+    store.init();
+    const drafted: CompileResult = {
+      route: "drafts",
+      confidence: 0.3,
+      adr: { ...adr, frontmatter: { ...adr.frontmatter, status: "draft" } },
+    };
+    store.writeAdr(drafted);
+    assert.equal(store.listAdrs("drafts").length, 1);
+
+    const promoted = store.promoteAdr("ADR-0001");
+    assert.equal(promoted.ok, true);
+    assert.equal(store.listAdrs("drafts").length, 0);
+    assert.equal(store.listAdrs("wiki").length, 1);
+    assert.equal(store.readAdr("ADR-0001")?.frontmatter.status, "accepted");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("supersedeAdr marks an ADR superseded and cites its replacement", () => {
+  const root = tempRoot();
+  try {
+    const store = createStore(root);
+    store.init();
+    store.writeAdr(result);
+    assert.equal(store.supersedeAdr("ADR-0001", "ADR-0009"), true);
+
+    const superseded = store.readAdr("ADR-0001");
+    assert.equal(superseded?.frontmatter.status, "superseded");
+    assert.match(superseded?.body ?? "", /Superseded by ADR-0009/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

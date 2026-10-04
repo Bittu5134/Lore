@@ -14,6 +14,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI_ENTRY = resolve(HERE, "..", "index.ts");
 /** packages/cli/src/commands -> <repo>/node_modules/.bin/tsx (offline hook fallback). */
 const TSX_BIN = resolve(HERE, "..", "..", "..", "..", "node_modules", ".bin", "tsx");
+/** packages/cli/src/commands -> the Lore installation root (recorded in config.json). */
+const LORE_REPO = resolve(HERE, "..", "..", "..", "..");
 
 /**
  * The continuity rule, embedded so `lore init` works no matter how lore was
@@ -93,7 +95,13 @@ export async function run(args: string[]): Promise<void> {
   process.stdout.write(`lore: initialising in ${root}\n`);
 
   // Store: dirs, config, state, ADR template, index (idempotent).
-  createStore(root).init();
+  const store = createStore(root);
+  store.init();
+
+  // Record where Lore lives so the capture plugin can register the MCP server
+  // and the hooks can find the CLI without absolute paths baked at build time.
+  const config = store.readConfig();
+  if (config.loreHome !== LORE_REPO) store.writeConfig({ ...config, loreHome: LORE_REPO });
 
   const created: string[] = [];
 

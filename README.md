@@ -69,7 +69,7 @@ See **[DEMO.md](DEMO.md)** for the full 5-minute judge script.
 | Part | Role |
 |---|---|
 | `lore` CLI | `init`, `compile`, `sync`, `backfill`, `watch`, `query`, `share`, `pull`, `reconcile`, `hook`, `mcp`, `doctor` |
-| Cline plugin | hooks `onEvent` on the agent runtime → appends reasoning + tool events to `raw/` |
+| Cline plugin | hooks `onEvent` → appends reasoning + tool events to `raw/`; injects the decision index as a rule (continuity); registers the MCP server |
 | Git hooks | `post-commit` → `lore sync`; `post-merge` → `lore reconcile` |
 | MCP server | stdio JSON-RPC: `search_lore`, `get_adr`, `record_decision` — works in any MCP client |
 
@@ -104,11 +104,19 @@ describing its behaviour and acceptance criteria. `PLAN.md` is the original buil
 | `lore sync [--auto]` | Commit → ADR (used by the post-commit hook) |
 | `lore backfill [--full]` | Document an existing repository's history in batches |
 | `lore watch` | Capture the editing session between commits |
-| `lore query <words>` | Search the wiki (no args = list) |
+| `lore query <words> [--all]` | Search the wiki (SQLite FTS when built; `--all` includes linked repos) |
+| `lore review [id\|--all]` | Triage drafts → accepted (`promoteAdr`) |
+| `lore supersede <id> [--by <id>]` | Retire a decision, citing its replacement |
+| `lore index` | Rebuild `wiki/index.md` + the SQLite FTS index |
+| `lore audit` | Scan raw evidence and the wiki for secrets (exit 1 on findings — CI-safe) |
+| `lore digest [--limit N]` | Markdown summary of recent decisions (for PR comments / release notes) |
+| `lore graph` | Write a self-contained HTML graph of the wiki (nodes = ADRs, edges = supersedes + shared tags) |
+| `lore link add\|remove\|list` | Manage related repositories; search them together with `query --all` |
+| `lore rollup [--month YYYY-MM] [--write]` | Synthesise a theme ADR over a period (dry run by default) |
 | `lore share [--out f]` / `lore pull f` | Export / import a portable knowledge bundle |
 | `lore reconcile` | After a merge: resolve wiki conflicts and renumber duplicate ids |
-| `lore mcp` | Run the MCP server (see `packages/mcp/README.md` to register it) |
-| `lore doctor` | Verify the whole installation and print fixes |
+| `lore mcp [--install]` | Run the MCP server, or register it in `~/.cline/mcp.json` |
+| `lore doctor` | Verify the whole installation and print the fix for each problem |
 
 Run any command with `npx --yes tsx packages/cli/src/index.ts <cmd>`, or link the shim once:
 `npm link ./packages/cli` (then `lore <cmd>` on your PATH).
@@ -125,15 +133,20 @@ Run any command with `npx --yes tsx packages/cli/src/index.ts <cmd>`, or link th
 
 ## Status & where it scales
 
-**Working today, verified end-to-end:** capture from live agent sessions (reasoning + tool trail), human
-commit capture via hooks, ADR compilation with a real model, offline fixture mode, search/MCP, sharing,
-merge reconciliation, and the watcher. 24 automated tests cover core; all packages type-check.
+**Working today, verified end-to-end:** capture from live agent sessions (reasoning + tool trail),
+human commit capture via hooks, ADR compilation with a real model, offline fixture mode, FTS search +
+MCP, draft review, supersession, cross-repo sharing, merge reconciliation, the watcher, a secrets
+audit, and an HTML decision graph. 29 automated tests cover core; all packages type-check;
+`npm run setup` and `lore doctor` both come back green on a fresh clone.
 
-**Known limits at scale** (a 2-year, hundreds-of-contributors repo): raw evidence read/parsed as one log,
-a wiki index rewritten per write, linear search, and per-commit inference cost. The planned fix is a
-storage swap (SQLite + FTS5, out-of-git raw, monthly partitions) plus hierarchical rollups
-(session → day → month → theme) with `supersedes` links — none of which changes the concept.
-`README`-level honesty beats an implausible claim.
+**Scaling work already in place** (for a repository with years of history and many contributors):
+raw evidence is git-ignored and **partitioned by month** with cursor-skipping reads; the wiki index is
+built on demand instead of on every write; search uses a **SQLite FTS5** index when the runtime
+supports it (linear scan otherwise); `lore rollup` summarises a period into theme ADRs linked by
+`supersedes`; secrets are ignored by default, redacted on capture, and auditable in CI.
+
+See **[docs/scaling.md](docs/scaling.md)** for the full table plus what remains
+(retention/compaction of old partitions, scheduled rollups, per-author id namespacing, incremental FTS).
 
 ## Team
 

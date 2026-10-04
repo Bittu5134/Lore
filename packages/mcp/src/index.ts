@@ -28,11 +28,11 @@ const TOOLS = [
   {
     name: "search_lore",
     description:
-      "Search the repository's local Lore wiki of architectural decisions (ADRs). Use this BEFORE changing code to learn why it is the way it is.",
+      "Search this repository's Lore wiki of architectural decision records (ADRs). ALWAYS call this BEFORE modifying code, so you know why it is the way it is. Use 2-5 distinctive keywords (a file name, a library, a concept). Returns matching ADR ids, titles and snippets.",
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Search terms, e.g. 'config loading'" },
+        query: { type: "string", description: "2-5 distinctive keywords, e.g. 'config loading dotenv'" },
         limit: { type: "number", description: "Maximum results (default 5)" },
       },
       required: ["query"],
@@ -50,16 +50,20 @@ const TOOLS = [
   {
     name: "record_decision",
     description:
-      "Record an architectural decision in the local Lore wiki. Call this when you make a non-obvious choice (a library, a pattern, a trade-off) so future sessions understand why.",
+      "Record an architectural decision you just made into this repository's Lore wiki. Call this when you: chose a library, pattern, data structure or format; rejected a plausible alternative after evaluating it; or discovered a constraint future work must respect. Always include the alternatives you rejected and WHY that is the most valuable part. Do not call it for trivial changes (formatting, typos, dependency bumps).",
     inputSchema: {
       type: "object",
       properties: {
-        title: { type: "string" },
+        title: { type: "string", description: "Imperative and specific, under 80 characters" },
         context: { type: "string", description: "The situation and constraints that forced a decision" },
-        decision: { type: "string", description: "What was chosen" },
-        alternatives: { type: "array", items: { type: "string" }, description: "Rejected options and why" },
+        decision: { type: "string", description: "What was chosen, stated plainly" },
+        alternatives: {
+          type: "array",
+          items: { type: "string" },
+          description: "Rejected options, each with the reason it was rejected",
+        },
         sources: { type: "array", items: { type: "string" } },
-        confidence: { type: "number" },
+        confidence: { type: "number", description: "0..1 certainty that this captures the real reasoning" },
       },
       required: ["title", "context", "decision"],
     },

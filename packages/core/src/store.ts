@@ -2,7 +2,15 @@
  * The .lore store: durable paths, cursor state, the raw event log and the wiki.
  * All capture lanes and the MCP server read/write through this.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   DEFAULT_CONFIG,
@@ -15,16 +23,11 @@ import {
   type LoreEvent,
   type LoreSource,
   type LoreState,
+  type SearchHit,
 } from "./types.ts";
 import { formatAdrFilename, numericId, padId, parseAdr, renderAdr } from "./adr.ts";
 import { parseEventsJsonl, serializeEvent, sortEvents } from "./events.ts";
-
-export interface SearchHit {
-  adrId: string;
-  title: string;
-  snippet: string;
-  score: number;
-}
+import { buildFtsIndex, searchFts } from "./search.ts";
 
 export interface LoreStore {
   readonly root: string;
@@ -41,7 +44,17 @@ export interface LoreStore {
   allAdrFrontmatter(): AdrFrontmatter[];
   readAdr(id: string): Adr | null;
   writeAdr(result: CompileResult): { id: string; path: string };
+  /** Promote a draft ADR into the accepted wiki. */
+  promoteAdr(id: string): { ok: boolean; path?: string; reason?: string };
+  /** Mark an ADR superseded, optionally pointing at the ADR that replaced it. */
+  supersedeAdr(id: string, byId?: string): boolean;
+  /** Where an ADR currently lives (used by the lifecycle commands). */
+  findAdr(id: string): { dir: "wiki" | "drafts"; rel: string } | null;
   searchAdrs(query: string, limit?: number): SearchHit[];
+  /** Like searchAdrs, but uses the SQLite FTS index when one has been built. */
+  searchAdrsAsync(query: string, limit?: number): Promise<SearchHit[]>;
+  /** Build/refresh the SQLite FTS index. Never throws; returns why it failed. */
+  buildSearchIndex(): Promise<{ ok: boolean; count?: number; reason?: string }>;
   regenerateIndex(): void;
 }
 
@@ -127,7 +140,10 @@ export function createStore(root: string): LoreStore {
     mkdirSync(abs(LORE_PATHS.raw), { recursive: true });
     const byFile = new Map<string, LoreEvent[]>();
     for (const event of events) {
-      const target = file ?? SOURCE_FILE[event.source] ?? "events.jsonl";
+      // Partition by month (raw/YYYY-MM-<source>.jsonl) so a cursor can skip whole
+      // months instead of reading the whole history back.
+      const source = SOURCE_FILE[event.source] ?? "events.jsonl";
+      const target = file ?? `${event.ts.slice(0, 7)}-${source}`;
       const bucket = byFile.get(target);
       if (bucket) bucket.push(event);
       else byFile.set(target, [event]);
@@ -140,9 +156,17 @@ export function createStore(root: string): LoreStore {
   function readEvents(options?: { since?: string }): LoreEvent[] {
     const rawDir = abs(LORE_PATHS.raw);
     if (!existsSync(rawDir)) return [];
+
+    // Partition files are named YYYY-MM-<source>.jsonl, so a cursor lets us skip
+    // entire months instead of parsing the whole history (see docs/scaling.md).
+    // Un-prefixed files (e.g. cli-hooks.jsonl) are always read - they stay small.
+    const sinceMonth = options?.since ? options.since.slice(0, 7) : undefined;
+
     const events: LoreEvent[] = [];
     for (const file of readdirSync(rawDir)) {
       if (!file.endsWith(".jsonl")) continue;
+      const month = /^(\d{4}-\d{2})-/.exec(file)?.[1];
+      if (month && sinceMonth && month < sinceMonth) continue;
       events.push(...parseEventsJsonl(readFileSync(join(rawDir, file), "utf8")));
     }
     const sorted = sortEvents(events);
@@ -215,8 +239,55 @@ export function createStore(root: string): LoreStore {
       ...state,
       nextAdrId: Math.max(state.nextAdrId, numericId(adr.frontmatter.id) + 1),
     });
-    regenerateIndex();
+    // NOTE: the index is intentionally NOT regenerated per write (O(n) per ADR
+    // means O(n^2) across a backfill). Callers regenerate once per run via
+    // regenerateIndex(), and `lore index` does it on demand.
     return { id: adr.frontmatter.id, path: rel };
+  }
+
+  function findAdr(id: string): { dir: "wiki" | "drafts"; rel: string } | null {
+    for (const dir of ["wiki", "drafts"] as const) {
+      for (const file of listAdrFiles(dir)) {
+        if (file.startsWith(id)) return { dir, rel: join(dirRel(dir), file) };
+      }
+    }
+    return null;
+  }
+
+  function promoteAdr(id: string): { ok: boolean; path?: string; reason?: string } {
+    const found = findAdr(id);
+    if (!found) return { ok: false, reason: `no ADR matching "${id}"` };
+    if (found.dir === "wiki") return { ok: true, path: found.rel };
+
+    let adr: Adr;
+    try {
+      adr = parseAdr(readFileSync(abs(found.rel), "utf8"));
+    } catch {
+      return { ok: false, reason: `could not parse ${found.rel}` };
+    }
+    adr.frontmatter.status = "accepted";
+    const rel = join(LORE_PATHS.wiki, formatAdrFilename(adr));
+    mkdirSync(abs(LORE_PATHS.wiki), { recursive: true });
+    writeFileSync(abs(rel), renderAdr(adr), "utf8");
+    unlinkSync(abs(found.rel));
+    return { ok: true, path: rel };
+  }
+
+  function supersedeAdr(id: string, byId?: string): boolean {
+    const found = findAdr(id);
+    if (!found) return false;
+    let adr: Adr;
+    try {
+      adr = parseAdr(readFileSync(abs(found.rel), "utf8"));
+    } catch {
+      return false;
+    }
+    adr.frontmatter.status = "superseded";
+    if (!/superseded by/i.test(adr.body)) {
+      adr.body = `${adr.body.trimEnd()}\n\n${byId ? `Superseded by ${byId}.` : "Superseded."}`;
+    }
+    writeFileSync(abs(found.rel), renderAdr(adr), "utf8");
+    return true;
   }
 
   function searchAdrs(query: string, limit = 5): SearchHit[] {
@@ -255,6 +326,15 @@ export function createStore(root: string): LoreStore {
     return hits.sort((a, b) => b.score - a.score).slice(0, limit);
   }
 
+  async function searchAdrsAsync(query: string, limit = 5): Promise<SearchHit[]> {
+    const hits = await searchFts({ root, listAdrs, readAdr }, query, limit);
+    return hits ?? searchAdrs(query, limit);
+  }
+
+  async function buildSearchIndex(): Promise<{ ok: boolean; count?: number; reason?: string }> {
+    return buildFtsIndex({ root, listAdrs, readAdr });
+  }
+
   function regenerateIndex(): void {
     const adrs = listAdrs("wiki");
     const drafts = listAdrs("drafts");
@@ -289,7 +369,12 @@ export function createStore(root: string): LoreStore {
     allAdrFrontmatter,
     readAdr,
     writeAdr,
+    findAdr,
+    promoteAdr,
+    supersedeAdr,
     searchAdrs,
+    searchAdrsAsync,
+    buildSearchIndex,
     regenerateIndex,
   };
 }

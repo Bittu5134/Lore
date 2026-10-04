@@ -15,3 +15,5 @@ nohup.out
 # Local bookkeeping that must not be shared (machine-specific cursors/locks).
 .lore/meta/inference.lock
 .lore/meta/previous-hooks-path.txt
+.lore/meta/search.db
+.lore/meta/links.json

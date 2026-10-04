@@ -8,6 +8,14 @@
  */
 import { fileURLToPath } from "node:url";
 
+// Piping into `head`/`grep` closes stdout early - that is not an error worth a stack trace.
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EPIPE") process.exit(0);
+});
+process.stderr.on("error", () => {
+  // stderr is gone; nothing useful to report
+});
+
 export const KNOWN_COMMANDS = [
   "init",
   "compile",
@@ -19,6 +27,14 @@ export const KNOWN_COMMANDS = [
   "share",
   "pull",
   "reconcile",
+  "review",
+  "supersede",
+  "index",
+  "audit",
+  "digest",
+  "graph",
+  "link",
+  "rollup",
   "doctor",
   "mcp",
 ] as const;
@@ -29,18 +45,26 @@ const HELP = `lore - local architectural knowledge engine
 Usage: lore <command> [options]
 
 Commands:
-  init                      Create .lore/ in this repo and install git hooks
+  init [--no-hooks]         Create .lore/ and install git hooks + the agent rule
   hook <event>              Consume a Cline hook payload from stdin (capture)
-  sync [--auto]             Compile new commits/sessions since the cursor
+  sync [--auto]             Compile commits since the cursor (post-commit hook)
   backfill [--full]         Replay git history through the compiler
-  watch                     Watch the working tree and capture edit sessions
-  compile [--last]          Compile the latest raw session into an ADR
-  query <text>              Search the local wiki
+  watch                     Capture the human editing session between commits
+  compile [--fixture]       Compile new evidence into ADRs (offline with --fixture)
+  query <text> [--all]      Search the wiki (--all = linked repos too)
+  review [id|--all]         Triage drafts into the accepted wiki
+  supersede <id> [--by <id>]  Retire a decision, linking its replacement
+  index                     Rebuild wiki/index.md + the SQLite FTS search index
+  audit                     Scan raw evidence and the wiki for secrets
+  digest [--limit N]        Markdown digest of recent decisions (for CI/PRs)
+  graph                     Write a self-contained HTML graph of the wiki
+  link [add|remove <path>]  Manage related repositories you search together
+  rollup [--month YYYY-MM] [--write]  Synthesise a theme ADR from a period
   share [--out <file>]      Export the wiki as a portable bundle
   pull <file>               Import a wiki bundle from another contributor
   reconcile                 Merge divergent wiki edits after a merge
   mcp [--install]           Run/register the Lore MCP server
-  doctor                    Diagnose the Lore installation
+  doctor                    Diagnose the whole installation, with fixes
 `;
 
 function assertNode(): void {

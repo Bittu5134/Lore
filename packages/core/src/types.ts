@@ -55,6 +55,11 @@ export interface LoreConfig {
   ignore: string[];
   /** Reconcile the wiki automatically on post-merge. */
   autoMergeReconcile: boolean;
+  /**
+   * Absolute path to the Lore installation (set by `lore init`). Lets the capture
+   * plugin register the MCP server without guessing where Lore lives.
+   */
+  loreHome?: string;
 }
 
 export const DEFAULT_CONFIG: LoreConfig = {
@@ -70,6 +75,17 @@ export const DEFAULT_CONFIG: LoreConfig = {
     "*.lock",
     "*.log",
     ".lore/meta/**",
+    // Secrets: never watched, captured, or documented.
+    ".env",
+    ".env.*",
+    "**/.env",
+    "**/.env.*",
+    "**/*.pem",
+    "**/*.key",
+    "**/*credential*",
+    "**/*secret*",
+    "**/id_rsa*",
+    "**/id_ed25519*",
   ],
   autoMergeReconcile: true,
 };
@@ -258,6 +274,14 @@ export interface GetAdrInput {
 }
 export interface GetAdrOutput {
   adr: Adr | null;
+}
+
+/** One search result row (used by both the linear scan and the FTS index). */
+export interface SearchHit {
+  adrId: string;
+  title: string;
+  snippet: string;
+  score: number;
 }
 
 export interface RecordDecisionInput {

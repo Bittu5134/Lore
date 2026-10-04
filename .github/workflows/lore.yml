@@ -1,0 +1,41 @@
+name: Lore
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm install
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Secrets audit (committed wiki)
+        run: npx tsx packages/cli/src/index.ts audit
+
+      - name: Rebuild the wiki index + search index
+        run: npx tsx packages/cli/src/index.ts index
+
+      - name: Decision digest
+        run: npx tsx packages/cli/src/index.ts digest --limit 20 > lore-digest.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lore-digest
+          path: lore-digest.md
+          if-no-files-found: ignore
+
+      # Optional: commit the refreshed index back, or post lore-digest.md as a PR comment.
+      # `lore sync` also runs locally via the post-commit hook, so CI mostly verifies.

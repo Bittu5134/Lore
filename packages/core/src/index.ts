@@ -9,3 +9,4 @@ export * from "./adr.ts";
 export * from "./events.ts";
 export * from "./store.ts";
 export * from "./compiler.ts";
+export * from "./search.ts";
