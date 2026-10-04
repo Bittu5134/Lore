@@ -64,6 +64,28 @@ test("appendEvents + readEvents round-trip through the raw layer", () => {
   }
 });
 
+test("appendEvents redacts secrets before they reach the raw log", () => {
+  const root = tempRoot();
+  try {
+    const store = createStore(root);
+    store.init();
+    const secretEvent: LoreEvent = {
+      ts: "2026-10-04T10:00:00.000Z",
+      source: "git-commit",
+      kind: "commit",
+      commit: "cafebabe",
+      payload: { message: "add key", diff: "+API_KEY=sk-proj-abcdefghijklmnop1234" },
+    };
+    store.appendEvents([secretEvent]);
+
+    const [readBack] = store.readEvents();
+    assert.match(String(readBack?.payload.diff), /redacted-openai-key/);
+    assert.doesNotMatch(String(readBack?.payload.diff), /sk-proj-abcdefghijklmnop1234/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("raw events are partitioned by month and a cursor skips old months", () => {
   const root = tempRoot();
   try {

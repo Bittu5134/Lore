@@ -28,6 +28,7 @@ import {
 import { formatAdrFilename, numericId, padId, parseAdr, renderAdr } from "./adr.ts";
 import { parseEventsJsonl, serializeEvent, sortEvents } from "./events.ts";
 import { buildFtsIndex, searchFts } from "./search.ts";
+import { redactValue } from "./redact.ts";
 
 export interface LoreStore {
   readonly root: string;
@@ -144,9 +145,11 @@ export function createStore(root: string): LoreStore {
       // months instead of reading the whole history back.
       const source = SOURCE_FILE[event.source] ?? "events.jsonl";
       const target = file ?? `${event.ts.slice(0, 7)}-${source}`;
+      // Redact before anything touches disk: secrets must never reach raw/.
+      const safe: LoreEvent = { ...event, payload: redactValue(event.payload) as LoreEvent["payload"] };
       const bucket = byFile.get(target);
-      if (bucket) bucket.push(event);
-      else byFile.set(target, [event]);
+      if (bucket) bucket.push(safe);
+      else byFile.set(target, [safe]);
     }
     for (const [target, bucket] of byFile) {
       appendFileSync(abs(join(LORE_PATHS.raw, target)), bucket.map((e) => `${serializeEvent(e)}\n`).join(""), "utf8");
