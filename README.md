@@ -492,7 +492,7 @@ See **[docs/scaling.md](docs/scaling.md)** for the full analysis and what remain
 
 **Team DietCode** · concept: [`concept/`](concept/) · pitch: [`concept/proposal.pdf`](concept/proposal.pdf)
 
-Licensed under the [MIT License](LICENSE) © 2026 Divyanshu Anand
+Licensed under the [MIT License](LICENSE) © 2026 Team DietCode
 
 *Git records what changed. Lore records why.*
 
