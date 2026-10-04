@@ -1,34 +1,53 @@
 #!/usr/bin/env node
 /**
- * Lane 3 - Lore MCP server using the official @modelcontextprotocol/sdk.
+ * @fileoverview Lore MCP (Model Context Protocol) Server.
  *
- * Exposes the frozen Lore tools over stdio:
- *   search_lore      - search the local wiki
- *   get_adr          - read one ADR by id
- *   record_decision  - write a decision the agent just made
+ * @description
+ * Implements a standards-compliant Model Context Protocol server using the official
+ * `@modelcontextprotocol/sdk`. Connects external AI coding agents (Cline, Claude Desktop,
+ * Cursor, Windsurf, Zed) directly to the repository's living architectural wiki.
  *
- * Repo root: LORE_ROOT env var, else cwd. Logs go to stderr only.
+ * Exposes three primary tools:
+ * 1. `search_lore`: Semantic & keyword retrieval over ADRs. Allows agents to query
+ *    prior constraints before modifying unfamiliar codebases.
+ * 2. `get_adr`: Complete retrieval of an individual ADR document by ID.
+ * 3. `record_decision`: Direct write access allowing agents to commit new architectural
+ *    decisions into `.lore/wiki/` or `.lore/drafts/`.
+ *
+ * Transport: stdio JSON-RPC.
+ * All diagnostic logs strictly route to stderr to keep stdout pure for RPC frames.
  */
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createStore, type RecordDecisionInput } from "@lore/core";
 
+// Determine repository root: LORE_ROOT environment variable, or fallback to cwd.
 const ROOT = process.env.LORE_ROOT ?? process.cwd();
 const store = createStore(ROOT);
 
+// Initialize official Model Context Protocol server instance
 const server = new McpServer({
   name: "lore",
   version: "0.0.1",
 });
 
+/**
+ * Wraps textual content in MCP's standard tool response structure.
+ *
+ * @param value Text string or object to serialize into content blocks.
+ * @returns Standard MCP content array payload.
+ */
 function text(value: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
     content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }],
   };
 }
 
-// 1. search_lore
+// ---------------------------------------------------------------------------
+// 1. Tool: search_lore
+// ---------------------------------------------------------------------------
 server.tool(
   "search_lore",
   "Search this repository's Lore wiki of architectural decision records (ADRs). ALWAYS call this BEFORE modifying code, so you know why it is the way it is. Use 2-5 distinctive keywords (a file name, a library, a concept). Returns matching ADR ids, titles and snippets.",
@@ -46,7 +65,9 @@ server.tool(
   },
 );
 
-// 2. get_adr
+// ---------------------------------------------------------------------------
+// 2. Tool: get_adr
+// ---------------------------------------------------------------------------
 server.tool(
   "get_adr",
   "Read one architectural decision record from the local Lore wiki by id (e.g. ADR-0001).",
@@ -60,10 +81,12 @@ server.tool(
   },
 );
 
-// 3. record_decision
+// ---------------------------------------------------------------------------
+// 3. Tool: record_decision
+// ---------------------------------------------------------------------------
 server.tool(
   "record_decision",
-  "Record an architectural decision you just made into this repository's Lore wiki. Call this when you: chose a library, pattern, data structure or format; rejected a plausible alternative after evaluating it; or discovered a constraint future work must respect. Always include the alternatives you rejected and WHY that is the most valuable part. Do not call it for trivial changes (formatting, typos, dependency bumps).",
+  "Record an architectural decision you just made into this repository's Lore wiki. Call this when you: chose a library, pattern, data structure or format; rejected a plausible alternative after evaluating it; or discovered a constraint future work must respect. Always include the alternatives you rejected and WHY that is the most valuable part. Do not call it for trivial changes (formatting, typos, dependency bumps) — UNLESS the user explicitly states that the change is non-trivial or significant: then record it anyway, and state in Consequences that the user flagged it, because their call outranks your own read of how small the diff looks. A user flag is an override of the size heuristic, not of the honesty requirements — never invent alternatives you did not actually consider.",
   {
     title: z.string().describe("Imperative and specific, under 80 characters"),
     context: z.string().describe("The situation and constraints that forced a decision"),
@@ -122,17 +145,21 @@ server.tool(
       },
     });
 
-    return text(`Recorded ${written.id} at ${written.path}`);
+    store.regenerateIndex();
+    return text(`Recorded ${written.id} in ${written.path} (${route === "wiki" ? "accepted" : "draft"}).`);
   },
 );
 
-async function main() {
+// ---------------------------------------------------------------------------
+// Server Startup & Transport Binding
+// ---------------------------------------------------------------------------
+async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  process.stderr.write(`lore mcp: serving ${ROOT} via @modelcontextprotocol/sdk\n`);
+  process.stderr.write(`[lore-mcp] server listening on stdio (root: ${ROOT})\n`);
 }
 
-main().catch((err) => {
-  process.stderr.write(`lore mcp error: ${err.message}\n`);
+main().catch((err: unknown) => {
+  process.stderr.write(`[lore-mcp] fatal error: ${String(err)}\n`);
   process.exit(1);
 });

@@ -1,0 +1,208 @@
+lore: compiling 15687 event(s) via cline-cli...
+lore: no architectural decision in these events (nothing recorded)
+lore: nothing new to compile
+lore: compiling 3 event(s) via cline-cli...
+lore: Command failed: cline -p You are Lore, an architectural-decision recorder for a software repository.
+You will receive EVENTS captured while code was being written: an AI agent's reasoning and tool activity,
+and/or git commits with diffs. Distil them into decision records that capture WHY - the part that diffs
+and commit messages never show.
+
+Rules:
+- Emit up to 3 decisions, most significant first.
+- Emit an EMPTY array when the events contain no architectural reasoning (formatting, typos, generated
+  files, dependency bumps, routine refactors). Silence is better than noise.
+- Base every claim on the events. Never invent facts. Thin evidence -> lower confidence.
+- "alternatives": options that were considered and REJECTED, each with the reason. Use [] if none appear.
+- "supersedes": the id of an EXISTING decision (listed below) that this change replaces, else null.
+  Never duplicate a decision that is already recorded.
+- title: imperative and specific, 80 characters or fewer.
+- confidence: 0..1 - how certain you are the record faithfully captures the reasoning.
+- Escape newlines inside strings as \n. Output valid JSON only.
+
+Respond with a single JSON object and NOTHING else (no prose, no code fences):
+{"decisions":[{"title": string, "context": string, "decision": string, "alternatives": string[], "consequences": string, "confidence": number, "tags": string[], "supersedes": string | null}]}
+
+Trigger: lore compile
+
+EXISTING DECISIONS (do not duplicate; supersede if replaced):
+- ADR-0001: Layer Lore as one core plus thin adapters: native hooks capture reasoning, MCP serves queries
+- ADR-0002: Shell out to the local Cline CLI (`cline -p`) as Lore's ADR inference backend
+- ADR-0003: Resolve ADR id collisions at write time from existing ADR files, not from the counter
+- ADR-0004: Capture Cline's live reasoning stream with a fail-open, node:*-only AgentPlugin onEvent hook that appends JSONL, and make the store self-heal its dirs
+- ADR-0005: Hand-roll a zero-dependency stdio JSON-RPC MCP server for Lore instead of adopting the official MCP SDK
+- ADR-0006: Preserve both sides of divergent wiki edits on merge and exchange decisions as portable JSON bundles (share/pull) instead of letting git merge the wiki
+- ADR-0007: Capture the human edit journey with Node's built-in recursive fs.watch — debounced and batched into a single fs_batch event — instead of a third-party watcher or per-file events
+- ADR-0008: Auto-compile ADRs detached when a run finishes (autonomy-gated, fail-open)
+- ADR-0009: Guard against self-capture feedback loop with env var plus filesystem lock
+- ADR-0010: Keep raw evidence local and month-partitioned; index wiki with SQLite FTS5
+- ADR-0011: Trigger auto-compile on every session end, including run-failed
+- ADR-0012: Adopt official @modelcontextprotocol/sdk for the MCP server
+- ADR-0013: Declare @cline/sdk as optional peer dependency of @lore/plugin
+- ADR-0014: Self-heal unknown sync cursor by falling back to full git log
+- ADR-0015: Untrack machine-local state.json cursor and pre-ignored raw evidence from git
+- ADR-0016: Exclude .lore/** from git-commit events so sync records user code only
+- ADR-0017: Append Lore local-state paths to user .gitignore idempotently at init
+- ADR-0018: Make /lore skill show stats and open an interactive SVG graph in the browser
+- ADR-0019: Render /lore stats fully in chat instead of opening the SVG graph in a browser
+
+EVENTS CAPTURED:
+[commit 484340d1] feat(plugin): enhance /lore skill to output project stats and open interactive HTML graph
+  files: packages/plugin/skills/lore/SKILL.md
+  diff:
+diff --git a/packages/plugin/skills/lore/SKILL.md b/packages/plugin/skills/lore/SKILL.md
+index b077cf0..0c2376c 100644
+--- a/packages/plugin/skills/lore/SKILL.md
++++ b/packages/plugin/skills/lore/SKILL.md
+@@ -1,31 +1,25 @@
+ ---
+ name: lore
+-description: Use the repository's Lore wiki before changing code, and record new architectural decisions after.
++description: Show Lore architectural memory stats, decisions, and open the visual dashboard in your browser. Also guides architectural consultation before modifying code.
+ ---
+ 
+-# Lore — architectural memory
+-
+-This repository keeps architectural decision records (ADRs) in `.lore/wiki/`.
+-
+-## Before you edit code
+-
+-1. Read `.lore/wiki/index.md`.
+-2. Search for the files and concepts you are about to touch:
+-   - with the Lore MCP server connected, call `search_lore`;
+-   - otherwise read the 2-3 ADRs whose titles or tags match your task.
+-   Read at most 3 — respect the context budget.
+-3. If an ADR covers your area, follow it. To contradict it, say explicitly in your final answer which
+-   ADR you are superseding and why.
+-
+-## While you work
+-
+-When you make a non-obvious choice — a library, a pattern, a data structure, a trade-off — record it:
+-call `record_decision` if the MCP server is available, otherwise write an ADR into `.lore/drafts/`
+-using `.lore/wiki/ADR-0000-template.md`. Always include the alternatives you rejected and the reason
+-each was rejected.
+-
+-Never edit `.lore/raw/` (immutable evidence) or `.lore/meta/` (bookkeeping).
+-
+-## At the end
+-
+-State which ADRs you consulted and what you recorded.
++# Lore — Architectural Memory, Stats & Graph
++
++When invoked with `/lore` or when asked about Lore statistics:
++
++1. **Check Status**: Run `lore status` (or `npx --yes tsx <loreHome>/packages/cli/src/index.ts status`) to collect metrics:
++   - Total accepted ADRs and pending drafts.
++   - Autonomy mode, confidence threshold, and git hook status.
++   - Recent evidence and capture files.
++2. **Generate Visual Graph**: Run `lore graph` (or `npx --yes tsx <loreHome>/packages/cli/src/index.ts graph`). This writes a self-contained interactive SVG decision graph to `.lore/wiki/graph.html`.
++3. **Present Statistics**:
++   - Total ADRs grouped by categories (Architecture, Capture, MCP, Git Sync, Storage).
++   - Any superseded decisions (e.g., ADR-0012 superseding ADR-0005).
++   - Any pending drafts awaiting review in `.lore/drafts/`.
++4. **Open in Web Browser**:
++   - Provide a direct clickable link to the user: `file://<absolute-repo-path>/.lore/wiki/graph.html`.
++   - Ask or run `xdg-open .lore/wiki/graph.html` (Linux) / `open .lore/wiki/graph.html` (macOS) / `start .lore/wiki/graph.html` (Windows) to pop open the visual graph in their default browser.
++
++## Architectural Consultation (Before editing code)
++- Read `.lore/wiki/index.md` or call `search_lore` to check existing constraints.
++- Follow active ADRs, and record new decisions into `.lore/drafts/` or via `record_decision`.
+[commit b6b20919] feat(plugin): format /lore output completely in chat without browser opening
+  files: packages/plugin/skills/lore/SKILL.md
+  diff:
+diff --git a/packages/plugin/skills/lore/SKILL.md b/packages/plugin/skills/lore/SKILL.md
+index 0c2376c..b15e472 100644
+--- a/packages/plugin/skills/lore/SKILL.md
++++ b/packages/plugin/skills/lore/SKILL.md
+@@ -1,25 +1,35 @@
+ ---
+ name: lore
+-description: Show Lore architectural memory stats, decisions, and open the visual dashboard in your browser. Also guides architectural consultation before modifying code.
++description: Show all Lore architectural stats, decision counts, ADR history, and knowledge base details directly in chat.
+ ---
+ 
+-# Lore — Architectural Memory, Stats & Graph
++# Lore — Architectural Stats & Overview
+ 
+-When invoked with `/lore` or when asked about Lore statistics:
++When invoked with `/lore` or when asked about Lore statistics and project info:
+ 
+-1. **Check Status**: Run `lore status` (or `npx --yes tsx <loreHome>/packages/cli/src/index.ts status`) to collect metrics:
+-   - Total accepted ADRs and pending drafts.
+-   - Autonomy mode, confidence threshold, and git hook status.
+-   - Recent evidence and capture files.
+-2. **Generate Visual Graph**: Run `lore graph` (or `npx --yes tsx <loreHome>/packages/cli/src/index.ts graph`). This writes a self-contained interactive SVG decision graph to `.lore/wiki/graph.html`.
+-3. **Present Statistics**:
+-   - Total ADRs grouped by categories (Architecture, Capture, MCP, Git Sync, Storage).
+-   - Any superseded decisions (e.g., ADR-0012 superseding ADR-0005).
+-   - Any pending drafts awaiting review in `.lore/drafts/`.
+-4. **Open in Web Browser**:
+-   - Provide a direct clickable link to the user: `file://<absolute-repo-path>/.lore/wiki/graph.html`.
+-   - Ask or run `xdg-open .lore/wiki/graph.html` (Linux) / `open .lore/wiki/graph.html` (macOS) / `start .lore/wiki/graph.html` (Windows) to pop open the visual graph in their default browser.
++1. **Collect Current Status & Metrics**:
++   - Run `lore status` (or `npx --yes tsx <loreHome>/packages/cli/src/index.ts status`) to inspect:
++     - Total accepted ADR count and pending drafts
++     - Autonomy mode (auto/manual) and confidence threshold
++     - Git hooks status (active hooks, hook path)
++     - Raw evidence files and capture events count
++   - Read `.lore/wiki/index.md` to see the full list of architectural decisions, their confidence scores, and status.
++
++2. **Present Comprehensive Data Directly in Chat**:
++   - **Summary Stats**: Total accepted decisions, pending drafts, confidence average/range, and hook health.
++   - **Categorized Breakdown**: Group decisions by theme:
++     - *Architecture & Core Patterns*
++     - *Inference & Compiler*
++     - *Capture & Event Pipeline*
++     - *MCP Server & Tooling*
++     - *Git Synchronization & Hygiene*
++     - *Storage & Scaling*
++   - **Decision Timeline**: List the latest 5-10 decisions with ID, title, status, and confidence.
++   - **Superseded Decisions**: Explicitly call out any decisions that have been replaced and what replaced them (e.g., ADR-0012 superseding ADR-0005).
++   - **Next… [494 chars truncated]
+[commit 7a7a39fb] fix(bin): ESM migration for lore launcher and promote ADR-0018/ADR-0019
+  files: packages/cli/bin/lore
+  diff:
+diff --git a/packages/cli/bin/lore b/packages/cli/bin/lore
+index 71b7b96..977519f 100755
+--- a/packages/cli/bin/lore
++++ b/packages/cli/bin/lore
+@@ -5,21 +5,22 @@
+  * Prefers the repo-local tsx binary (works offline, no npx fetch) and falls
+  * back to `npx --yes tsx` when the repo has not been `npm install`ed yet.
+  */
+-const { spawnSync } = require("node:child_process");
+-const path = require("node:path");
+-const fs = require("node:fs");
++import { spawnSync } from "node:child_process";
++import { dirname, join } from "node:path";
++import { existsSync, realpathSync } from "node:fs";
++import { fileURLToPath } from "node:url";
+ 
+-const here = path.dirname(fs.realpathSync(__filename));
+-const entry = path.join(here, "..", "src", "index.ts");
++const here = dirname(realpathSync(fileURLToPath(import.meta.url)));
++const entry = join(here, "..", "src", "index.ts");
+ const args = process.argv.slice(2);
+-const binDir = path.join(here, "..", "..", "..", "node_modules", ".bin");
++const binDir = join(here, "..", "..", "..", "node_modules", ".bin");
+ const isWin = process.platform === "win32";
+ 
+ function run(cmd, cmdArgs) {
+   return spawnSync(cmd, cmdArgs, { stdio: "inherit", shell: isWin });
+ }
+ 
+-const localTsx = [path.join(binDir, "tsx"), path.join(binDir, "tsx.cmd")].find((p) => fs.existsSync(p));
++const localTsx = [join(binDir, "tsx"), join(binDir, "tsx.cmd")].find((p) => existsSync(p));
+ 
+ let result;
+ if (localTsx && localTsx.endsWith(".cmd")) { --cwd /home/bittu/Developer/temp/Lore --thinking medium
+lore: compiling 3 event(s) via cline-cli...
+lore: ADR-0020 (confidence 0.60) -> .lore/wiki/ADR-0020-write-the-lore-bin-launcher-in-native-esm-with-import-meta-u.md
+lore: nothing new to compile
+lore: compiling 1 event(s) via cline-cli...
+lore: no architectural decision in these events (nothing recorded)
+lore: nothing new to compile
+lore: nothing new to compile
+lore: nothing new to compile
+lore: nothing new to compile
+lore: nothing new to compile
+lore: nothing new to compile

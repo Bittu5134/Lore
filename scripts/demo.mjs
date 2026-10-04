@@ -1,14 +1,24 @@
 #!/usr/bin/env node
 /**
- * `npm run demo` - the hackathon demo in ONE command.
+ * @fileoverview `npm run demo` — Interactive Self-Narrating Hackathon Demo.
  *
- * Self-narrating, zero typing for the presenter. Offline by default (uses the
- * fixture pipeline, no model call needed). Pass --live to run a real Cline
- * session if the CLI is authenticated.
+ * @description
+ * Automated product demonstration showcasing the complete Lore architectural memory loop.
  *
- *   npm run demo           # offline, works anywhere
- *   npm run demo -- --live # real model calls (needs `cline auth`)
+ * Demo Scenario:
+ *  - Step 0: Initializes an isolated sandbox repository in `/tmp/lore-demo`.
+ *  - Step 1: Executes `lore init` (creates `.lore/`, installs git hooks, registers continuity rules).
+ *  - Step 2: Simulates developer/agent activity (seeding live reasoning or offline fixtures).
+ *  - Step 3: Demonstrates autonomous compilation (decisions synthesized without manual intervention).
+ *  - Step 4: Interrogates the generated wiki (`lore query`).
+ *  - Step 5: Demonstrates human commit capture via git hooks (zero AI required).
+ *  - Step 6: Visualizes the architectural decision graph (`lore graph`).
+ *
+ * Modes:
+ *  - `npm run demo`: Fully offline; uses fixtures and requires no API keys or model accounts.
+ *  - `npm run demo -- --live`: Live demonstration invoking real Cline models.
  */
+
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -76,11 +86,11 @@ try {
     "Watch: no commands. The session ended, so Lore is compiling it into a decision record on its own.",
   );
   if (live) {
-    // auto-compile is async; give it a moment, then show what appeared
+    // Auto-compile is async; give it a moment, then show what appeared
     process.stdout.write("(waiting a few seconds for the background compile…)\n");
     await new Promise((r) => setTimeout(r, 15000));
   } else {
-    lore(["compile"]);
+    lore(["compile", "--fixture"]);
   }
 
   step("4 · this is what Lore captured", "Context. Decision. The alternatives that were REJECTED and why. That's the part a git diff can never tell you.");
@@ -98,32 +108,19 @@ try {
   run("git", ["add", "-A"]);
   run("git", ["-c", "user.email=dev@demo.dev", "-c", "user.name=Demo", "commit", "-q", "-m", "feat: add retry count to the default config"]);
   if (live) {
-    process.stdout.write("\n(waiting for the post-commit hook to run lore sync…)\n");
-    await new Promise((r) => setTimeout(r, 20000));
+    process.stdout.write("(post-commit hook is running in the background…)\n");
+    await new Promise((r) => setTimeout(r, 10000));
   } else {
-    // offline: run the same pipeline the hook would run, with the fixture
-    process.stdout.write("\n(offline: running the same sync the hook runs, with the fixture)\n");
     lore(["sync", "--fixture"]);
   }
-  run("ls", [join(DEMO, ".lore", "wiki")]);
 
-  step(
-    "6 · it documents itself",
-    "Lore's own repository wiki was written by Lore while we built Lore.",
-  );
-  try {
-    execFileSync("cat", [join(ROOT, ".lore", "wiki", "index.md")], { stdio: "inherit" });
-  } catch {
-    // no wiki in the host repo yet: fine for the demo
-  }
+  step("6 · the decision graph", "Every ADR links to what it supersedes and what shares its tags. An HTML graph you can open in a browser.");
+  lore(["graph"]);
+  process.stdout.write(`  view graph: file://${DEMO}/.lore/wiki/graph.html\n`);
 
-  beat("done");
-  say(
-    "Local knowledge, captured from agents AND humans, compiled automatically, and searchable from any tool. The why is never lost again.",
-  );
-  process.stdout.write(`\nPlayground kept at ${DEMO} — explore with: npx --yes tsx ${CLI} status\n`);
+  beat("end of demo");
+  say("That's Lore. Git records what changed. Lore records why.");
 } catch (err) {
-  process.stderr.write(`\ndemo failed: ${(err && err.message) || err}\n`);
-  process.stderr.write(`\nOffline fallback: npm run demo (without --live) needs nothing but Node.\n`);
-  process.exitCode = 1;
+  process.stderr.write(`demo failed: ${err.message}\n`);
+  process.exit(1);
 }

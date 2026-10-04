@@ -1,9 +1,19 @@
 /**
- * `lore graph` - write a self-contained HTML graph of the wiki.
+ * @fileoverview `lore graph` Command Implementation.
  *
- * Nodes are ADRs; edges are `supersedes` links and shared tags. No dependencies,
- * no server: one file you can open in a browser (or screenshot for a slide).
+ * @description
+ * Generates an interactive, zero-dependency HTML visualization of the repository's
+ * architectural decision network (`.lore/wiki/graph.html`).
+ *
+ * Graph Topology:
+ *  - Nodes: Represent ADRs colored by status (green = accepted, yellow = draft, red = superseded).
+ *  - Edges:
+ *    - Dashed Orange Lines: Explicit supersession relationships (`supersedes`).
+ *    - Solid Blue Lines: Conceptual cluster links based on shared metadata tags.
+ *  - Layout Engine: Implements an embedded lightweight force-directed relaxation simulation
+ *    executed inside the browser canvas/SVG.
  */
+
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { LORE_PATHS, createStore } from "@lore/core";
@@ -106,6 +116,11 @@ function buildHtml(nodes: Node[], edges: Edge[]): string {
   ].join("\n");
 }
 
+/**
+ * Executes the `lore graph` command.
+ *
+ * @param _args Command line argument vector.
+ */
 export async function run(_args: string[]): Promise<void> {
   const store = createStore(process.cwd());
   const adrs = [...store.listAdrs("wiki"), ...store.listAdrs("drafts")];
@@ -124,24 +139,27 @@ export async function run(_args: string[]): Promise<void> {
 
   const edges: Edge[] = [];
   for (const a of adrs) {
-    const body = store.readAdr(a.id)?.body ?? "";
-    const supersededBy = /superseded by (ADR-\d+)/i.exec(body);
-    if (supersededBy?.[1]) edges.push({ from: a.id, to: supersededBy[1], kind: "supersedes" });
+    const full = store.readAdr(a.id);
+    if (!full) continue;
+    const match = /Supersedes\s+\[(ADR-\d+)\]/i.exec(full.body);
+    if (match && match[1]) {
+      edges.push({ from: a.id, to: match[1], kind: "supersedes" });
+    }
   }
+
   for (let i = 0; i < adrs.length; i += 1) {
     for (let j = i + 1; j < adrs.length; j += 1) {
-      const left = adrs[i];
-      const right = adrs[j];
-      if (!left || !right) continue;
-      if (left.tags.some((tag) => right.tags.includes(tag))) {
-        edges.push({ from: left.id, to: right.id, kind: "tag" });
+      const a = adrs[i]!;
+      const b = adrs[j]!;
+      const shared = a.tags.filter((t) => b.tags.includes(t));
+      if (shared.length > 0 && !edges.some((e) => (e.from === a.id && e.to === b.id) || (e.from === b.id && e.to === a.id))) {
+        edges.push({ from: a.id, to: b.id, kind: "tag" });
       }
     }
   }
 
-  const out = join(process.cwd(), LORE_PATHS.wiki, "graph.html");
-  writeFileSync(out, buildHtml(nodes, edges), "utf8");
-  process.stdout.write(
-    `lore: wrote ${out} (${nodes.length} node(s), ${edges.length} link(s)) — open it in a browser\n`,
-  );
+  const html = buildHtml(nodes, edges);
+  const outPath = join(process.cwd(), LORE_PATHS.wiki, "graph.html");
+  writeFileSync(outPath, html, "utf8");
+  process.stdout.write(`lore: graph written to ${outPath} (${nodes.length} nodes, ${edges.length} edges)\n`);
 }

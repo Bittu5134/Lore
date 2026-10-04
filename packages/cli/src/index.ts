@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 /**
- * lore - CLI entry point.
+ * @fileoverview Lore Main CLI Entrypoint & Dynamic Command Router.
  *
- * Command dispatch is dynamic: each command lives in ./commands/<name>.ts and
- * exports `run(args: string[]): Promise<void>`. Lanes own their own command
- * files, so parallel edits never collide on this dispatcher.
+ * @description
+ * Primary command-line interface for the `lore` tool.
+ *
+ * Design Invariants:
+ *  - Fast Startup: Dynamic dispatch loads individual command modules (`./commands/<cmd>.ts`)
+ *    on demand, keeping the cold-start overhead minimal.
+ *  - EPIPE Safety: Silently exits when terminal pipes (such as `lore query ... | head`)
+ *    close standard output early.
+ *  - Node Version Guard: Asserts Node 22+ requirement (`node:sqlite`, recursive `fs.watch`, `node:test`).
+ *  - Layered UX: Bare `lore` opens an actionable status dashboard; `lore --help` prints
+ *    a clean, categorized command reference.
  */
+
 import { fileURLToPath } from "node:url";
 
 // Piping into `head`/`grep` closes stdout early - that is not an error worth a stack trace.
@@ -13,9 +22,12 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EPIPE") process.exit(0);
 });
 process.stderr.on("error", () => {
-  // stderr is gone; nothing useful to report
+  // Stderr is gone; nothing useful to report
 });
 
+/**
+ * Enumeration of all registered CLI commands supported by Lore.
+ */
 export const KNOWN_COMMANDS = [
   "status",
   "init",
@@ -82,6 +94,9 @@ THE REST (only when you need it)
 Docs: README.md (start here)  |  docs/demo.md (60-second version)  |  docs/scaling.md
 `;
 
+/**
+ * Validates that the runtime Node.js version satisfies engine requirements (Node >= 22).
+ */
 function assertNode(): void {
   const major = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
   if (!Number.isFinite(major) || major < 22) {
@@ -93,6 +108,9 @@ function assertNode(): void {
   }
 }
 
+/**
+ * Main application router.
+ */
 async function main(): Promise<void> {
   assertNode();
   const argv = process.argv.slice(2);
@@ -120,27 +138,23 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const url = new URL(`./commands/${cmd}.ts`, import.meta.url).href;
   try {
-    const mod = (await import(url)) as { run?: (args: string[]) => Promise<void> };
+    const mod = (await import(new URL(`./commands/${cmd}.ts`, import.meta.url).href)) as {
+      run?: (args: string[]) => Promise<void>;
+    };
     if (typeof mod.run !== "function") {
-      throw new Error(`command module "${cmd}" does not export run()`);
+      process.stderr.write(`lore: command "${cmd}" has no run() export\n`);
+      process.exit(1);
     }
     await mod.run(rest);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === "ERR_MODULE_NOT_FOUND") {
-      process.stderr.write(
-        `lore: command "${cmd}" is not implemented yet - see packages/cli/SPEC.md\n`,
-      );
-      process.exit(1);
-    }
-    process.stderr.write(`lore: ${(err as Error).message}\n`);
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`lore: ${message}\n`);
     process.exit(1);
   }
 }
 
-const isDirect = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
-if (isDirect) {
-  void main();
-}
+main().catch((err: unknown) => {
+  process.stderr.write(`lore: unhandled failure - ${String(err)}\n`);
+  process.exit(1);
+});

@@ -1,10 +1,27 @@
+/**
+ * @fileoverview Dynamic Continuity Rule Generator for Cline Sessions.
+ *
+ * @description
+ * Builds the dynamic system prompt rule injected into Cline coding sessions.
+ *
+ * In conventional agent systems, agents start with zero historical context, frequently
+ * reversing past architectural consensus or re-litigating settled trade-offs.
+ *
+ * Lore's continuity rule directly injects the top ADRs from `.lore/wiki/` into the
+ * agent's working memory at session start. This guarantees:
+ * 1. The agent immediately knows which architectural constraints are already established.
+ * 2. The agent is directed to use `search_lore` or read relevant ADRs before modifying code.
+ * 3. The agent is prompted to call `record_decision` when making novel design choices.
+ */
+
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Continuity injection: instead of hoping the model reads `.clinerules`, the
- * plugin registers a rule containing the repository's decision index, so every
- * session starts already knowing what was decided here.
+ * Compiles the active decision catalog into a concise markdown instruction block.
+ *
+ * @param root Absolute path to the repository root.
+ * @returns Complete rule text ready for injection via `api.registerRule()`.
  */
 export function continuityRule(root: string): string {
   const wiki = join(root, ".lore", "wiki");
@@ -38,6 +55,8 @@ export function continuityRule(root: string): string {
     "`record_decision` tool if the Lore MCP server is available, otherwise write an ADR into",
     "`.lore/drafts/` using `.lore/wiki/ADR-0000-template.md` (include the alternatives you rejected).",
     "Never edit `.lore/raw/` or `.lore/meta/`.",
+    "If the user explicitly states a change is non-trivial or significant, record it with",
+    "`record_decision` even when it looks small, and note in Consequences that the user flagged it.",
     "",
     "## Known decisions",
     "",

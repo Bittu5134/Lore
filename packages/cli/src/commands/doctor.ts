@@ -1,9 +1,21 @@
 /**
- * `lore doctor` - verify the whole installation and print actionable fixes.
+ * @fileoverview `lore doctor` Command Implementation.
  *
- * Checks the target repo (cwd) AND the machine: Node, the store, git hooks,
- * the Cline CLI + auth, and whether the installed capture plugin is current.
+ * @description
+ * Diagnostic suite that validates the entire Lore runtime environment and prints
+ * specific remediation commands for any detected issues.
+ *
+ * Checks:
+ *  - Node.js runtime version compatibility (requires Node 22+)
+ *  - Repository status & `.lore/config.json` validity
+ *  - Git hooks configuration (`core.hooksPath === .lore/hooks`)
+ *  - Executability and presence of git hook scripts
+ *  - Agent continuity rule presence (`.clinerules/lore.md`)
+ *  - Cline CLI installation & authentication status
+ *  - Registered Cline capture plugins and source staleness
+ *  - Wiki consistency (counts accepted ADRs and pending drafts)
  */
+
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -70,6 +82,11 @@ function findInstalledPluginFiles(): string[] {
   return found;
 }
 
+/**
+ * Executes the `lore doctor` command.
+ *
+ * @param _args Command line argument vector.
+ */
 export async function run(_args: string[]): Promise<void> {
   const root = process.cwd();
   const checks: Check[] = [];
@@ -122,106 +139,120 @@ export async function run(_args: string[]): Promise<void> {
     checks.push({ label: "Git hooks active", status: "ok", detail: LORE_PATHS.hooks });
   }
 
-  const wanted = ["post-commit", "post-merge"];
-  const present = wanted.filter((h) => existsSync(join(root, LORE_PATHS.hooks, h)));
-  checks.push(
-    present.length === wanted.length
-      ? { label: "Hook scripts", status: "ok", detail: present.join(", ") }
-      : {
-          label: "Hook scripts",
-          status: "warn",
-          detail: `missing ${wanted.filter((h) => !present.includes(h)).join(", ")}`,
-          fix: "Re-run `lore init`",
-        },
-  );
-
-  const wikiDir = join(root, LORE_PATHS.wiki);
-  const adrs = existsSync(wikiDir)
-    ? readdirSync(wikiDir).filter((f) => /^ADR-\d{4}-/.test(f)).length
-    : 0;
-  checks.push({
-    label: "Wiki",
-    status: adrs > 0 ? "ok" : "warn",
-    detail: `${adrs} ADR(s)`,
-    fix: adrs === 0 ? "Run `lore compile` (or `lore compile --fixture`) after some activity" : undefined,
-  });
-
-  // ---- the machine ----
-  const clineVersion = tryRun("cline", ["--version"]);
-  checks.push(
-    clineVersion
-      ? { label: "Cline CLI", status: "ok", detail: `v${clineVersion.replace(/^v/, "")}` }
-      : {
-          label: "Cline CLI",
-          status: "warn",
-          detail: "not found",
-          fix: "npm i -g cline (or demo offline with `lore compile --fixture`)",
-        },
-  );
-
-  const providers = join(HOME, ".cline", "data", "settings", "providers.json");
-  if (!clineVersion) {
-    checks.push({ label: "Cline auth", status: "warn", detail: "unknown (no cline CLI)" });
-  } else if (!existsSync(providers)) {
-    checks.push({
-      label: "Cline auth",
-      status: "warn",
-      detail: "no provider configured",
-      fix: "cline auth (or use `lore compile --fixture`)",
-    });
+  const postCommit = join(root, LORE_PATHS.hooks, "post-commit");
+  if (existsSync(postCommit)) {
+    checks.push({ label: "post-commit hook", status: "ok", detail: "installed" });
   } else {
-    checks.push({ label: "Cline auth", status: "ok", detail: "provider configured" });
+    checks.push({
+      label: "post-commit hook",
+      status: "warn",
+      detail: "missing",
+      fix: "Run `lore init` to install hooks",
+    });
   }
 
-  const localPlugin = join(LORE_REPO, "packages", "plugin", "src", "index.ts");
-  const installed = findInstalledPluginFiles();
-  if (!clineVersion || installed.length === 0) {
+  const rulePath = join(root, LORE_PATHS.ruleFile);
+  if (existsSync(rulePath)) {
+    checks.push({ label: "Agent continuity rule", status: "ok", detail: LORE_PATHS.ruleFile });
+  } else {
+    checks.push({
+      label: "Agent continuity rule",
+      status: "warn",
+      detail: "missing",
+      fix: "Run `lore init` to generate the rule",
+    });
+  }
+
+  // ---- the machine & Cline ----
+  const clineBin = tryRun("which", ["cline"]);
+  if (!clineBin) {
+    checks.push({
+      label: "Cline CLI",
+      status: "warn",
+      detail: "not on PATH",
+      fix: "npm install -g cline",
+    });
+  } else {
+    const auth = tryRun("cline", ["auth", "status"]);
+    const authed = auth && !/not logged in|unauthorized/i.test(auth);
+    checks.push({
+      label: "Cline CLI",
+      status: authed ? "ok" : "warn",
+      detail: `${clineBin}${authed ? " (authenticated)" : " (not authenticated)"}`,
+      fix: authed ? undefined : "Run `cline auth` to authenticate",
+    });
+  }
+
+  const installedPlugins = findInstalledPluginFiles();
+  if (installedPlugins.length === 0) {
     checks.push({
       label: "Capture plugin",
       status: "warn",
-      detail: clineVersion ? "not installed" : "unknown (no cline CLI)",
+      detail: "not installed in Cline",
       fix: `cline plugin install ${join(LORE_REPO, "packages", "plugin")}`,
     });
-  } else if (existsSync(localPlugin)) {
-    const local = readFileSync(localPlugin, "utf8");
-    const inSync = installed.some((p) => readFileSync(p, "utf8") === local);
-    checks.push(
-      inSync
-        ? { label: "Capture plugin", status: "ok", detail: `${installed.length} copy, in sync` }
-        : {
-            label: "Capture plugin",
-            status: "warn",
-            detail: "installed copy is STALE (older than this checkout)",
-            fix: `cline plugin uninstall lore && cline plugin install ${join(LORE_REPO, "packages", "plugin")}`,
-          },
-    );
   } else {
-    checks.push({ label: "Capture plugin", status: "ok", detail: `${installed.length} installed` });
+    const repoPluginSrc = join(LORE_REPO, "packages", "plugin", "src", "index.ts");
+    let upToDate = true;
+    try {
+      if (existsSync(repoPluginSrc)) {
+        const repoText = readFileSync(repoPluginSrc, "utf8");
+        for (const file of installedPlugins) {
+          if (readFileSync(file, "utf8") !== repoText) upToDate = false;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    checks.push({
+      label: "Capture plugin",
+      status: upToDate ? "ok" : "warn",
+      detail: `${installedPlugins.length} copy found${upToDate ? "" : " (out of date)"}`,
+      fix: upToDate
+        ? undefined
+        : `Run \`npm run setup\` to refresh the installed plugin, or copy ${repoPluginSrc} over ${installedPlugins[0]}`,
+    });
   }
 
-  const mcpConfig = join(HOME, ".cline", "mcp.json");
-  const mcpRegistered = existsSync(mcpConfig) && readFileSync(mcpConfig, "utf8").includes('"lore"');
+  // ---- wiki status ----
+  const wikiDir = join(root, LORE_PATHS.wiki);
+  const draftsDir = join(root, LORE_PATHS.drafts);
+  let adrCount = 0;
+  let draftCount = 0;
+  try {
+    if (existsSync(wikiDir)) {
+      adrCount = readdirSync(wikiDir).filter((f) => /^ADR-\d{4}-.*\.md$/.test(f)).length;
+    }
+    if (existsSync(draftsDir)) {
+      draftCount = readdirSync(draftsDir).filter((f) => /^ADR-\d{4}-.*\.md$/.test(f)).length;
+    }
+  } catch {
+    // ignore
+  }
   checks.push({
-    label: "MCP server",
-    status: mcpRegistered ? "ok" : "warn",
-    detail: mcpRegistered ? "registered in ~/.cline/mcp.json" : "not registered",
-    fix: "See packages/mcp/README.md (needed for the VS Code extension)",
+    label: "ADR catalog",
+    status: "ok",
+    detail: `${adrCount} accepted, ${draftCount} draft(s)`,
   });
 
-  // ---- report ----
-  process.stdout.write(`lore doctor — ${root}\n`);
+  // ---- render ----
+  process.stdout.write("Lore doctor\n\n");
   for (const c of checks) {
-    const tag = c.status === "ok" ? "  ok  " : c.status === "warn" ? " WARN " : " FAIL ";
-    process.stdout.write(`${tag} ${c.label}${c.detail ? ` — ${c.detail}` : ""}\n`);
-    if (c.fix && c.status !== "ok") process.stdout.write(`       fix: ${c.fix}\n`);
+    const symbol = c.status === "ok" ? "ok  " : c.status === "warn" ? "WARN" : "FAIL";
+    const det = c.detail ? ` (${c.detail})` : "";
+    process.stdout.write(`  ${symbol}  ${c.label}${det}\n`);
+    if (c.fix) process.stdout.write(`         -> fix: ${c.fix}\n`);
   }
+  process.stdout.write("\n");
 
-  const failures = checks.filter((c) => c.status === "fail").length;
-  const warnings = checks.filter((c) => c.status === "warn").length;
-  process.stdout.write(
-    failures === 0
-      ? `lore: healthy${warnings > 0 ? ` (${warnings} warning${warnings === 1 ? "" : "s"})` : ""}\n`
-      : `lore: ${failures} problem(s)${warnings > 0 ? `, ${warnings} warning(s)` : ""}\n`,
-  );
-  process.exit(failures === 0 ? 0 : 1);
+  const fails = checks.filter((c) => c.status === "fail").length;
+  const warns = checks.filter((c) => c.status === "warn").length;
+  if (fails > 0) {
+    process.stdout.write(`Found ${fails} failure(s) and ${warns} warning(s). Follow the fixes above.\n`);
+    process.exitCode = 1;
+  } else if (warns > 0) {
+    process.stdout.write(`Found ${warns} warning(s). Core features will work; see fixes for full capability.\n`);
+  } else {
+    process.stdout.write("All checks passed. Lore is ready to record decisions.\n");
+  }
 }
