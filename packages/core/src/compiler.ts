@@ -1,8 +1,20 @@
 /**
- * The ADR compiler: turn captured events into one architectural decision record.
+ * @fileoverview ADR Compilation Engine & Model Inference Pipeline.
  *
- * Inference shells out to `cline -p` (reusing the user's existing Cline auth),
- * but is injectable so tests never touch the network.
+ * @description
+ * Distils captured chronological telemetry events (agent reasoning deltas, tool
+ * executions, git diffs) into structured Architectural Decision Records.
+ *
+ * Key Capabilities:
+ *  - CLI Shell-Out: Shells out to the local authenticated `cline -p` CLI,
+ *    reusing existing user credentials with zero external API key requirements.
+ *  - Test Injection: Accepts a custom `infer` function for 100% offline unit testing.
+ *  - Robust JSON Recovery: Features a resilient multi-stage JSON candidate extractor
+ *    (`parseDecisionsJson`) capable of handling thinking logs, code fences, literal
+ *    newlines, and multi-candidate streams by prioritizing the final decision block.
+ *  - Multi-Decision Synthesis: Extracts up to 3 distinct decisions per session run,
+ *    or returns an empty array when the events describe routine maintenance.
+ *  - Supersession Detection: Automatically links and updates superseded ADRs.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";

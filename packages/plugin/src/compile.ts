@@ -1,16 +1,34 @@
+/**
+ * @fileoverview Auto-Compilation Subprocess Manager for the Cline Plugin.
+ *
+ * @description
+ * Manages background compilation tasks triggered when Cline sessions complete.
+ *
+ * Autonomous Execution Invariant:
+ * When an agent run ends (via `run-finished` or `run-failed`), Lore spawns a
+ * completely detached Node subprocess running `lore compile`. This guarantees:
+ * 1. The agent session and user experience are never blocked or delayed.
+ * 2. If the compilation process fails or crashes, the host agent remains unaffected (fail-open).
+ * 3. A filesystem-based lock (`.lore/meta/inference.lock`) prevents self-capture feedback loops.
+ */
+
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { LoreConfigLite } from "./types.ts";
 
+/**
+ * Returns the effective repository root path, checking `LORE_ROOT` or defaulting to `cwd`.
+ */
 export function loreRoot(): string {
   return process.env.LORE_ROOT ?? process.cwd();
 }
 
 /**
- * True while Lore is running its own `cline` inference (`lore compile`/`sync`).
- * Cline may sandbox plugins without inheriting our env vars, so this filesystem
- * marker - written by the compiler - is the reliable signal.
+ * Checks whether a Lore inference task is actively executing.
+ * Uses a filesystem lock (`.lore/meta/inference.lock`) with a 10-minute timeout safeguard.
+ *
+ * @returns True if inference is currently running.
  */
 export function inferenceInFlight(): boolean {
   try {
@@ -21,6 +39,12 @@ export function inferenceInFlight(): boolean {
   }
 }
 
+/**
+ * Reads `.lore/config.json` safely without throwing exceptions.
+ *
+ * @param root Repository root directory.
+ * @returns Parsed configuration object or `null`.
+ */
 export function readLoreConfig(root: string): LoreConfigLite | null {
   try {
     return JSON.parse(readFileSync(join(root, ".lore", "config.json"), "utf8")) as LoreConfigLite;
@@ -30,9 +54,11 @@ export function readLoreConfig(root: string): LoreConfigLite | null {
 }
 
 /**
- * Where `lore compile` can be run from. Known only after `lore init` recorded
- * loreHome - we never guess, because a wrong path would make Cline run a
- * random file on the user's machine.
+ * Determines the executable command and arguments needed to trigger `lore compile`.
+ * Resolves local tsx binaries or falls back to `npx --yes tsx`.
+ *
+ * @param root Repository root directory.
+ * @returns Command and argument tuple, or `null` if Lore is not configured.
  */
 export function compileCommand(root: string): { cmd: string; args: string[] } | null {
   const home = readLoreConfig(root)?.loreHome;
@@ -45,9 +71,11 @@ export function compileCommand(root: string): { cmd: string; args: string[] } | 
 }
 
 /**
- * AUTO-COMPILE: When a run ends, the session's captured evidence is distilled
- * into a decision record without the user running anything. Detached + fail-open:
- * the agent loop never waits, never breaks, and recursion is impossible.
+ * AUTO-COMPILE TRIGGER:
+ * Spawns a detached, asynchronous `lore compile` subprocess when an agent run terminates.
+ * Outputs are directed to `.lore/meta/compile.log`.
+ *
+ * @param root Repository root directory.
  */
 export function spawnDetachedCompile(root: string): void {
   const logPath = join(root, ".lore", "meta", "compile.log");
@@ -67,6 +95,6 @@ export function spawnDetachedCompile(root: string): void {
     });
     child.unref();
   } catch {
-    // fail-open
+    // Fail-open: compilation failures must never affect the agent host
   }
 }

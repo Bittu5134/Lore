@@ -1,13 +1,22 @@
 /**
- * `lore share [--out <file>]` - export the wiki as a portable bundle.
+ * @fileoverview `lore share` Command Implementation.
  *
- * Mechanism: hand another contributor (or another agent session) a single JSON
- * file carrying the decisions, without sharing the whole repository history.
+ * @description
+ * Exports the complete architectural wiki into a portable, single-file JSON bundle
+ * for distribution across repositories, offline analysis, or onboarding teammates.
+ *
+ * Bundle Payload:
+ * Includes all accepted and draft ADRs alongside total telemetry counts,
+ * without bundling sensitive git history or massive raw log files.
  */
+
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createStore, type Adr } from "@lore/core";
 
+/**
+ * Portable schema representation of an exported Lore knowledge bundle.
+ */
 export interface LoreBundle {
   version: number;
   exportedAt: string;
@@ -16,6 +25,12 @@ export interface LoreBundle {
   rawEventCount: number;
 }
 
+/**
+ * Extracts all ADRs from the store into a standalone bundle structure.
+ *
+ * @param root Repository root directory.
+ * @returns Fully populated LoreBundle.
+ */
 export function buildBundle(root: string): LoreBundle {
   const store = createStore(root);
   const adrs = store
@@ -32,6 +47,11 @@ export function buildBundle(root: string): LoreBundle {
   };
 }
 
+/**
+ * Executes the `lore share` command.
+ *
+ * @param args Command line arguments (`--out <path>`).
+ */
 export async function run(args: string[]): Promise<void> {
   const outIndex = args.indexOf("--out");
   const target = resolve(

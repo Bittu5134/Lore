@@ -1,6 +1,14 @@
 /**
- * The .lore store: durable paths, cursor state, the raw event log and the wiki.
- * All capture lanes and the MCP server read/write through this.
+ * @fileoverview Lore On-Disk Storage Engine & Repository Knowledge Store.
+ *
+ * @description
+ * Implements the centralized `.lore/` persistence engine managing:
+ *  - On-disk folder hierarchy (`config.json`, `hooks/`, `raw/`, `wiki/`, `drafts/`, `meta/`)
+ *  - Month-partitioned JSONL telemetry event logging (`raw/YYYY-MM-*.jsonl`)
+ *  - State cursors for incremental synchronization (`meta/state.json`)
+ *  - ADR markdown read, write, draft promotion, and supersession updates
+ *  - Real-time catalog generation (`wiki/index.md`)
+ *  - Dual-mode search: indexed SQLite FTS5 with automatic linear scan fallback
  */
 import {
   appendFileSync,

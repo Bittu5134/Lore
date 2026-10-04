@@ -1,12 +1,25 @@
 /**
- * `lore rollup [--month YYYY-MM] [--write]` - synthesise a theme ADR from a period.
+ * @fileoverview `lore rollup` Command Implementation.
  *
- * This is the hierarchical half of the scaling plan: instead of re-ingesting
- * history forever, decisions are rolled upward (session -> day/month -> theme)
- * and the resulting ADR links back to the ones it summarises.
+ * @description
+ * Implements hierarchical architectural synthesis for repository scaling.
+ *
+ * Instead of retaining hundreds of fine-grained granular ADRs forever, `lore rollup`
+ * distils a month or era of individual decisions into a unified "Theme ADR".
+ *
+ * Execution Modes:
+ *  - Default Dry Run: Prints proposed synthesized themes without modifying the disk.
+ *  - Persisted Mode (`--write`): Records the synthesized Theme ADR into the wiki and updates indexes.
+ *  - Month Filter (`--month YYYY-MM`): Restricts synthesis to a specific calendar month.
  */
+
 import { createClineCompiler, createStore, type LoreEvent } from "@lore/core";
 
+/**
+ * Executes the `lore rollup` command.
+ *
+ * @param args Command line arguments (`--month YYYY-MM`, `--write`).
+ */
 export async function run(args: string[]): Promise<void> {
   const write = args.includes("--write");
   const monthIndex = args.indexOf("--month");
@@ -31,7 +44,7 @@ export async function run(args: string[]): Promise<void> {
     return;
   }
 
-  // The ADRs themselves are the evidence for the rollup.
+  // The ADRs themselves form the synthesized evidence payload.
   const events: LoreEvent[] = adrs.map((adr) => ({
     ts: `${adr.date}T00:00:00.000Z`,
     source: "manual",

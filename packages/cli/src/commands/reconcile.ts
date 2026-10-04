@@ -1,12 +1,19 @@
 /**
- * `lore reconcile` - merge divergent wiki edits after a git merge.
+ * @fileoverview `lore reconcile` Command Implementation.
  *
- * Two branches can both extend the wiki, producing (a) raw conflict markers in
- * the same page, and/or (b) two pages claiming the same ADR id. Reconcile keeps
- * BOTH sides' knowledge: conflict markers are resolved by retaining both
- * variants, and duplicate ids are renumbered (content preserved). The result is
- * committed as `lore: reconcile wiki`.
+ * @description
+ * Automated resolution engine for divergent architectural wiki files following a git merge.
+ *
+ * Merging Strategies:
+ * 1. Intra-Page Conflict Markers: Resolves `<<<<<<< / ======= / >>>>>>>` markers by preserving
+ *    BOTH variants in sequence separated by an explanatory HTML comment. Knowledge is never dropped.
+ * 2. ID Collision Resolution: When concurrent branches both authored records with the same
+ *    ID (e.g. two authors created `ADR-0012`), the second record is automatically renumbered
+ *    to the next unused sequential ID, and references within the file are adjusted.
+ * 3. Commit Integration: Automatically stages the reconciled wiki changes and commits
+ *    as `lore: reconcile wiki`.
  */
+
 import { execFileSync } from "node:child_process";
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -22,6 +29,9 @@ import {
 
 const CONFLICT = /<<<<<<<[^\n]*\n([\s\S]*?)=======\n([\s\S]*?)>>>>>>>[^\n]*\n/g;
 
+/**
+ * Resolves standard Git conflict markers by appending both ours and theirs bodies.
+ */
 function mergeConflictMarkers(markdown: string): string {
   return markdown.replace(CONFLICT, (_match, ours: string, theirs: string) => {
     const a = ours.trim();
@@ -36,6 +46,11 @@ function dirRel(dir: "wiki" | "drafts"): string {
   return dir === "wiki" ? LORE_PATHS.wiki : LORE_PATHS.drafts;
 }
 
+/**
+ * Executes the `lore reconcile` command.
+ *
+ * @param _args Command line argument vector.
+ */
 export async function run(_args: string[]): Promise<void> {
   const root = process.cwd();
   const store = createStore(root);

@@ -1,14 +1,31 @@
 /**
- * `lore status` - the dashboard: what Lore saw, decided, and is waiting on.
+ * @fileoverview `lore status` Command Implementation.
  *
- * Also runs when you type bare `lore`. This is the first thing a new user should
- * see, so it reads like a report, not a manual.
+ * @description
+ * Primary operational dashboard for Lore. Executed both when typing `lore status`
+ * and when invoking bare `lore` with no arguments.
+ *
+ * Dashboard Metrics Displayed:
+ *  - Project root & store configuration status
+ *  - Count of accepted decisions vs unreviewed drafts
+ *  - Autonomy policy setting & confidence thresholds
+ *  - Relative timestamp of most recent telemetry capture
+ *  - Operational status of git hooks (`post-commit`, `post-merge`)
+ *  - Recommended context-sensitive next actions
+ *  - List of the 3 most recently recorded decisions
  */
+
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { LORE_PATHS, createStore } from "@lore/core";
 
+/**
+ * Calculates human-friendly relative duration from an ISO timestamp.
+ *
+ * @param iso ISO-8601 timestamp string.
+ * @returns Formatted relative time string (e.g., "5m ago", "2h ago", "never").
+ */
 function ago(iso: string | undefined): string {
   if (!iso) return "never";
   const ms = Date.now() - Date.parse(iso);
@@ -21,11 +38,16 @@ function ago(iso: string | undefined): string {
   return `${Math.round(h / 24)}d ago`;
 }
 
+/**
+ * Executes the `lore status` command.
+ *
+ * @param _args Command line argument vector.
+ */
 export async function run(_args: string[]): Promise<void> {
   const root = process.cwd();
   const out = process.stdout;
 
-  // Not initialised: say the one thing to do, and nothing else.
+  // Not initialised: prompt user with the setup command.
   if (!existsSync(join(root, LORE_PATHS.config))) {
     out.write(
       [
@@ -60,7 +82,7 @@ export async function run(_args: string[]): Promise<void> {
         const mt = statSync(join(rawDir, file)).mtime.toISOString();
         if (mt > lastCapture) lastCapture = mt;
       } catch {
-        // unreadable file: ignore
+        // Unreadable file: ignore
       }
     }
   }
@@ -75,7 +97,7 @@ export async function run(_args: string[]): Promise<void> {
     hooksOk =
       hooksPath === LORE_PATHS.hooks && existsSync(join(root, LORE_PATHS.hooks, "post-commit"));
   } catch {
-    // not a git repo
+    // Not a git repo
   }
 
   out.write(`\n  lore — ${root}\n\n`);

@@ -1,11 +1,23 @@
 /**
- * `lore index` - regenerate the markdown index and the SQLite FTS search index.
+ * @fileoverview `lore index` Command Implementation.
  *
- * Indexes are read-time artefacts: nothing is rewritten per ADR write, so this is
- * the command you run after a batch of changes (or in CI, before deploying docs).
+ * @description
+ * Re-indexes the entire repository knowledge base:
+ * 1. Markdown Index: Re-renders `.lore/wiki/index.md` listing all accepted decisions and pending drafts.
+ * 2. SQLite FTS5 Index: Rebuilds `.lore/meta/search.db` to accelerate keyword and semantic retrieval.
+ *
+ * Architectural Invariant:
+ * Indexes are treated as read-time acceleration artifacts. Rebuilding them is fully
+ * idempotent and safe to execute during continuous integration or docs deployment.
  */
+
 import { createStore } from "@lore/core";
 
+/**
+ * Executes the `lore index` command.
+ *
+ * @param _args Command line argument vector.
+ */
 export async function run(_args: string[]): Promise<void> {
   const store = createStore(process.cwd());
   store.regenerateIndex();

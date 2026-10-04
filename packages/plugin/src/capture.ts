@@ -1,3 +1,14 @@
+/**
+ * @fileoverview Telemetry Capture and Normalization Handler for Cline Events.
+ *
+ * @description
+ * Intercepts Cline SDK `AgentRuntimeEvent` items, performs write-path redaction,
+ * normalizes them into `LoreEvent` JSONL structures, and appends them to `.lore/raw/session.jsonl`.
+ *
+ * Automatically detects the termination of agent runs (`run-finished`, `run-failed`)
+ * and triggers autonomous background compilation (`spawnDetachedCompile`).
+ */
+
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RuntimeEventLike } from "./types.ts";
@@ -9,17 +20,34 @@ import {
   spawnDetachedCompile,
 } from "./compile.ts";
 
+/**
+ * Returns the path to the raw telemetry directory (`.lore/raw`), creating it if absent.
+ */
 export function rawDir(): string {
   const dir = join(loreRoot(), ".lore", "raw");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
+/**
+ * Redacts and truncates text or objects to limit raw log sizes.
+ *
+ * @param value Data to sanitize and truncate.
+ * @param max Maximum character length.
+ * @returns Safe string representation.
+ */
 export function truncate(value: unknown, max: number): string {
   const text = redactValue(value);
   return text.length <= max ? text : `${text.slice(0, max)}…`;
 }
 
+/**
+ * Converts a raw Cline runtime event into a standardized Lore event record.
+ * Returns `null` for unmonitored event types.
+ *
+ * @param event Incoming runtime event.
+ * @returns Serialized LoreEvent record or `null`.
+ */
 export function toRecord(event: RuntimeEventLike): Record<string, unknown> | null {
   const base = { ts: new Date().toISOString(), source: "cline-session", iteration: event.iteration };
 
@@ -78,6 +106,17 @@ export function toRecord(event: RuntimeEventLike): Record<string, unknown> | nul
   }
 }
 
+/**
+ * Primary telemetry capture entrypoint called by the plugin's `onEvent` hook.
+ *
+ * Guarantees:
+ *  - Fail-Open: Encapsulated in try/catch to ensure telemetry NEVER interrupts the agent.
+ *  - Infinite Loop Prevention: Silently skips events generated during Lore's own inference runs.
+ *  - Opt-in Enforcement: Active ONLY in repositories initialized with `lore init`.
+ *  - Secret Shielding: Automatically skips tool events interacting with secret files.
+ *
+ * @param event Raw event emitted by the agent runtime.
+ */
 export function capture(event: RuntimeEventLike): void {
   try {
     const root = loreRoot();
@@ -104,6 +143,6 @@ export function capture(event: RuntimeEventLike): void {
       }
     }
   } catch {
-    // fail-open: capture must never break or slow the agent loop
+    // Fail-open: telemetry capture must never break or slow down the agent loop
   }
 }

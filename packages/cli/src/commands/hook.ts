@@ -1,17 +1,23 @@
 /**
- * `lore hook <event>` - capture adapter for Cline CLI runtime hooks.
+ * @fileoverview `lore hook` Command Implementation.
  *
- * The CLI delivers a JSON payload on stdin (verified events: agent_start,
- * agent_resume, agent_abort, agent_end, agent_error, tool_call, tool_result,
- * prompt_submit, pre_compact, session_shutdown). We normalise it into a
- * LoreEvent and append it to the immutable raw log.
+ * @description
+ * Ingestion adapter for Cline CLI runtime lifecycle hooks (`~/.cline/hooks/hooks.json`).
  *
- * MUST never fail the host: any error exits 0.
+ * Execution Invariants:
+ *  - Standard Input Ingestion: Reads JSON payload streamed over stdin.
+ *  - Normalization: Maps Cline hook primitives (`agent_start`, `tool_call`, `tool_result`,
+ *    `prompt_submit`, etc.) into canonical `LoreEvent` records.
+ *  - Fail-Open Execution: Must NEVER interrupt or crash the calling agent host; any error
+ *    cleanly exits with code 0.
+ *  - Append-Only Persistence: Appends normalized records directly to `.lore/raw/cli-hooks.jsonl`.
  */
+
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { CLINE_HOOK_EVENTS, LORE_PATHS, type LoreEvent, type LoreEventKind } from "@lore/core";
 
+/** Reads the entire standard input stream into a string buffer. */
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
@@ -29,6 +35,13 @@ const KIND_BY_EVENT: Partial<Record<string, LoreEventKind>> = {
   session_shutdown: "agent_end",
 };
 
+/**
+ * Normalizes incoming CLI hook events into standard LoreEvent structures.
+ *
+ * @param event Event type string from argv.
+ * @param raw Parsed JSON payload from stdin.
+ * @returns Structured LoreEvent.
+ */
 function normalise(event: string, raw: Record<string, unknown>): LoreEvent {
   const pre = (raw.preToolUse ?? {}) as Record<string, unknown>;
   const post = (raw.postToolUse ?? {}) as Record<string, unknown>;
@@ -57,11 +70,16 @@ function normalise(event: string, raw: Record<string, unknown>): LoreEvent {
   };
 }
 
+/**
+ * Executes the `lore hook` command.
+ *
+ * @param args Command line arguments (`<event_name>`).
+ */
 export async function run(args: string[]): Promise<void> {
   const event = args[0] ?? "";
   try {
     if (!(CLINE_HOOK_EVENTS as readonly string[]).includes(event)) {
-      return; // unknown event: stay silent, never break the host
+      return; // Unknown event: stay silent, never break the host
     }
     const text = (await readStdin()).trim();
     const raw = text ? (JSON.parse(text) as Record<string, unknown>) : {};
@@ -69,6 +87,6 @@ export async function run(args: string[]): Promise<void> {
     mkdirSync(loreRoot, { recursive: true });
     appendFileSync(join(loreRoot, "cli-hooks.jsonl"), JSON.stringify(normalise(event, raw)) + "\n");
   } catch {
-    // fail-open: capture must never block the agent loop
+    // Fail-open: capture must never block or crash the agent loop
   }
 }

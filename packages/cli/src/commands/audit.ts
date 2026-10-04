@@ -1,14 +1,27 @@
 /**
- * `lore audit` - scan the Lore store for secrets that should never have been captured.
+ * @fileoverview `lore audit` Command Implementation.
  *
- * Exits non-zero when something is found, so it can gate CI.
+ * @description
+ * Performs comprehensive security vulnerability and secret exposure scanning across
+ * both raw telemetry event logs (`.lore/raw/`) and compiled ADR documents (`.lore/wiki/`, `.lore/drafts/`).
+ *
+ * Scans for:
+ *  - API keys (OpenAI `sk-...`, AWS `AKIA...`)
+ *  - Personal access tokens (GitHub `ghp_...`)
+ *  - Cryptographic private keys (`BEGIN ... PRIVATE KEY`)
+ *  - Generic password, token, and secret assignments
+ *
+ * CI Compatibility:
+ * Exits with status code 1 if unredacted secrets or high-entropy credentials are
+ * discovered, enabling automated policy enforcement in GitHub Actions or pre-commit checks.
  */
+
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { LORE_PATHS, createStore } from "@lore/core";
 
 const PATTERNS: Array<[string, RegExp]> = [
-  // (?<![A-Za-z0-9]) so words like "risk-management-…" are not mistaken for keys.
+  // (?<![A-Za-z0-9]) prevents words like "risk-management-…" from triggering false alarms.
   ["OpenAI-style key", /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{16,}/g],
   ["GitHub token", /(?<![A-Za-z0-9])ghp_[A-Za-z0-9]{20,}/g],
   ["AWS access key", /(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}(?![A-Za-z0-9])/g],
@@ -16,6 +29,11 @@ const PATTERNS: Array<[string, RegExp]> = [
   ["assigned secret", /(?:password|passwd|secret|api[_-]?key|token)\s*[:=]\s*["']?[^\s"',]{8,}/gi],
 ];
 
+/**
+ * Executes the `lore audit` command.
+ *
+ * @param _args Command line argument vector.
+ */
 export async function run(_args: string[]): Promise<void> {
   const root = process.cwd();
   const store = createStore(root);

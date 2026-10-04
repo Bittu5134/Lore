@@ -1,15 +1,25 @@
 /**
- * `lore watch` - capture the human editing journey between commits.
+ * @fileoverview `lore watch` Command Implementation.
  *
- * Diffs show the destination; a watcher shows the road: files touched, tried,
- * and reverted. Batches are debounced and filtered, then recorded as `fs_batch`
- * events that the compiler can reason over.
+ * @description
+ * Filesystem session watcher capturing human development iterations between commits.
+ *
+ * Rationale:
+ * A git commit only records the final state of code, omitting the exploratory journey
+ * (e.g. files touched, tried, and discarded). `lore watch` uses Node.js recursive filesystem
+ * watching to debounce and batch edit events, logging `fs_batch` records for the compiler.
  */
+
 import { watch } from "node:fs";
 import { createStore, type LoreEvent } from "@lore/core";
 
 const DEBOUNCE_MS = 2500;
 
+/**
+ * Executes the `lore watch` command.
+ *
+ * @param _args Command line argument vector.
+ */
 export async function run(_args: string[]): Promise<void> {
   const root = process.cwd();
   const store = createStore(root);

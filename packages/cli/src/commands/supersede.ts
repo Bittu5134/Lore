@@ -1,11 +1,22 @@
 /**
- * `lore supersede <id> [--by <id>]` - retire a decision.
+ * @fileoverview `lore supersede` Command Implementation.
  *
- * Keeps the history navigable: the old ADR stays, marked `superseded`, ideally
- * pointing at the ADR that replaced it.
+ * @description
+ * Retires an obsolete or deprecated architectural decision.
+ *
+ * Invariant:
+ * Lore NEVER deletes historical decision records. Instead, it marks the status
+ * as `superseded` and appends a `## Superseded` link pointing to the replacement ADR.
+ * This preserves the complete historical evolution of the system.
  */
+
 import { createStore } from "@lore/core";
 
+/**
+ * Executes the `lore supersede` command.
+ *
+ * @param args Command line arguments (`<id>`, `--by <replacement_id>`).
+ */
 export async function run(args: string[]): Promise<void> {
   const store = createStore(process.cwd());
   const byIndex = args.indexOf("--by");

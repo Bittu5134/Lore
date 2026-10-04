@@ -1,22 +1,40 @@
 /**
- * Optional SQLite FTS5 full-text index over the wiki.
+ * @fileoverview SQLite FTS5 Full-Text Search Engine for Lore ADRs.
  *
- * `node:sqlite` ships with Node 22+; FTS5 support depends on the bundled SQLite
- * build (present on Node 26, may need `--experimental-sqlite` on early 22.x).
- * Every entry point degrades gracefully: if anything is unavailable, callers
- * fall back to the plain linear scan, which is correct - just slower.
+ * @description
+ * Implements high-speed, indexed full-text search across the Lore knowledge wiki using
+ * Node.js's built-in `node:sqlite` module (introduced in Node 22+).
+ *
+ * Design Invariants:
+ *  - Graceful Degradation: If `node:sqlite` or the FTS5 extension is unavailable on the
+ *    host platform, search entry points cleanly return `null` so the caller automatically
+ *    falls back to the robust in-memory linear scanner without throwing errors.
+ *  - On-Demand Refresh: The virtual table is refreshed during indexing and re-indexed
+ *    without locking out concurrent readers.
+ *  - BM25 Scoring: Ranks matches using SQLite's BM25 algorithm and extracts highlighted
+ *    snippets with custom delimiters (`[`, `]`).
  */
+
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { LORE_PATHS, type AdrFrontmatter, type SearchHit } from "./types.ts";
 
-/** Structural view of the store the index needs (avoids an import cycle). */
+/**
+ * Structural interface defining store capabilities required by the search indexer.
+ * Decouples `search.ts` from `store.ts` to eliminate circular dependency hazards.
+ */
 export interface SearchSource {
+  /** Repository root directory path. */
   root: string;
+  /** Lists ADR frontmatter metadata from wiki and/or drafts. */
   listAdrs(dir?: "wiki" | "drafts"): AdrFrontmatter[];
+  /** Reads the full content of an ADR by ID. */
   readAdr(id: string): { frontmatter: AdrFrontmatter; body: string } | null;
 }
 
+/**
+ * Minimal interface representing the synchronous SQLite database connection.
+ */
 interface SqliteDb {
   exec(sql: string): void;
   prepare(sql: string): {
@@ -26,10 +44,23 @@ interface SqliteDb {
   close(): void;
 }
 
+/**
+ * Returns the absolute path to the SQLite search database on disk.
+ *
+ * @param root Repository root directory.
+ * @returns Absolute path to `.lore/meta/search.db`.
+ */
 function dbPath(root: string): string {
   return join(root, LORE_PATHS.meta, "search.db");
 }
 
+/**
+ * Attempts to dynamically import `node:sqlite` and open the local search database.
+ * Returns `null` if the native module is unavailable.
+ *
+ * @param root Repository root directory.
+ * @returns Connected SqliteDb instance or null.
+ */
 async function openDb(root: string): Promise<SqliteDb | null> {
   try {
     const mod = (await import("node:sqlite")) as { DatabaseSync: new (p: string) => SqliteDb };
@@ -40,7 +71,15 @@ async function openDb(root: string): Promise<SqliteDb | null> {
   }
 }
 
-/** Build/refresh the FTS index. Returns ok:false (never throws) when unavailable. */
+/**
+ * Builds or refreshes the SQLite FTS5 full-text search index from all wiki and draft ADRs.
+ *
+ * This operation is idempotent and never throws; if SQLite or FTS5 is unsupported,
+ * it returns `{ ok: false, reason: "..." }`.
+ *
+ * @param source Store interface providing access to ADRs.
+ * @returns Status object detailing success status, indexed document count, or failure reason.
+ */
 export async function buildFtsIndex(
   source: SearchSource,
 ): Promise<{ ok: boolean; count?: number; reason?: string }> {
@@ -70,7 +109,14 @@ export async function buildFtsIndex(
   }
 }
 
-/** Query the FTS index. Returns null when there is no usable index. */
+/**
+ * Executes a full-text query against the SQLite FTS5 virtual table.
+ *
+ * @param source Store interface providing filesystem paths.
+ * @param query Space-separated keyword string (e.g., "sqlite search performance").
+ * @param limit Maximum number of search results to return.
+ * @returns Array of scored `SearchHit` objects, or `null` if the FTS index does not exist or fails.
+ */
 export async function searchFts(
   source: SearchSource,
   query: string,
@@ -99,7 +145,7 @@ export async function searchFts(
       adrId: String(row.id),
       title: String(row.title),
       snippet: String(row.snip ?? "").replace(/\s+/g, " ").trim(),
-      // bm25() returns lower = better; invert so callers can sort desc
+      // bm25() returns lower = better; invert so callers can sort descending (higher = better)
       score: Number.isFinite(Number(row.score)) ? 1 / (1 + Math.abs(Number(row.score))) : 1,
     }));
   } catch {

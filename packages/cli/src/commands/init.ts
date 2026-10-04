@@ -1,8 +1,18 @@
 /**
- * `lore init` - create the .lore store and install the capture plumbing.
+ * @fileoverview `lore init` Command Implementation.
  *
- * Lane 0 (shared infrastructure): every other lane assumes these paths exist.
+ * @description
+ * Bootstraps the complete Lore infrastructure inside a target repository:
+ * 1. Storage Layout: Initializes `.lore/` directory tree (`config.json`, `hooks/`, `raw/`,
+ *    `wiki/`, `drafts/`, `meta/`).
+ * 2. Agent Continuity Rule: Generates `.clinerules/lore.md` injecting instructions into Cline sessions.
+ * 3. Git Hooks: Installs `post-commit` (`lore sync --auto`) and `post-merge` (`lore reconcile`)
+ *    hooks into `.lore/hooks` and points `git config core.hooksPath` to them.
+ * 4. Safety Preservation: If an existing `core.hooksPath` (such as Husky or Lefthook) is detected,
+ *    its path is preserved in `.lore/meta/previous-hooks-path.txt`.
+ * 5. Gitignore Protection: Appends local machine cursors and raw evidence directories to `.gitignore`.
  */
+
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -49,7 +59,7 @@ records (ADRs) in \`.lore/wiki/ADR-*.md\`.
 6. State which ADRs you consulted and what you recorded.
 `;
 
-
+/** Finds the top-level repository root directory via git, or falls back to cwd. */
 function repoRoot(): string {
   try {
     return execFileSync("git", ["rev-parse", "--show-toplevel"], {
@@ -61,6 +71,7 @@ function repoRoot(): string {
   }
 }
 
+/** Idempotently writes a file only if it does not already exist. */
 function writeIfAbsent(path: string, content: string, mode?: number): boolean {
   if (existsSync(path)) return false;
   writeFileSync(path, content, "utf8");
@@ -68,6 +79,7 @@ function writeIfAbsent(path: string, content: string, mode?: number): boolean {
   return true;
 }
 
+/** Generates executable shell script wrapper for git lifecycle hooks. */
 function hookScript(hook: string, command: string): string {
   return `#!/bin/sh
 # Lore ${hook} hook (installed by \`lore init\`).
@@ -89,6 +101,11 @@ exit 0
 `;
 }
 
+/**
+ * Executes the `lore init` command.
+ *
+ * @param args Command line arguments (`--no-hooks`).
+ */
 export async function run(args: string[]): Promise<void> {
   const root = repoRoot();
   const installHooks = !args.includes("--no-hooks");

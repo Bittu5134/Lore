@@ -1,10 +1,22 @@
 /**
- * `lore digest [--limit N]` - a markdown digest of the newest decisions.
+ * @fileoverview `lore digest` Command Implementation.
  *
- * Built for CI: pipe it into a PR comment or release note.
+ * @description
+ * Generates an executive Markdown summary of recent architectural decisions.
+ * Designed for automated integration into Pull Request comments, developer newsletters,
+ * and release notes.
+ *
+ * Usage:
+ *  `lore digest [--limit <count>]`
  */
+
 import { createStore } from "@lore/core";
 
+/**
+ * Executes the `lore digest` command.
+ *
+ * @param args Command line arguments (`--limit <N>`).
+ */
 export async function run(args: string[]): Promise<void> {
   const store = createStore(process.cwd());
   const limitIndex = args.indexOf("--limit");

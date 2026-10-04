@@ -1,9 +1,14 @@
 /**
- * `lore mcp` - run or register the Lore MCP server.
+ * @fileoverview `lore mcp` Command Implementation.
  *
- *   lore mcp             run the server on stdio (manual wiring / debugging)
- *   lore mcp --install   register it in Cline's MCP config (~/.cline/mcp.json)
+ * @description
+ * Manages Model Context Protocol connectivity:
+ *  - `lore mcp`: Spawns the Lore stdio MCP server directly for testing or custom orchestration.
+ *  - `lore mcp --install`: Automatically registers Lore into the user's global Cline MCP
+ *    configuration file (`~/.cline/mcp.json`), configuring auto-approval for `search_lore`,
+ *    `get_adr`, and `record_decision`.
  */
+
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -18,6 +23,11 @@ interface McpConfig {
   mcpServers?: Record<string, unknown>;
 }
 
+/**
+ * Executes the `lore mcp` command.
+ *
+ * @param args Command line arguments (`--install`).
+ */
 export async function run(args: string[]): Promise<void> {
   const root = process.cwd();
 

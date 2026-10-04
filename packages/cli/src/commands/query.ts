@@ -1,14 +1,26 @@
 /**
- * `lore query <text> [--all]` - search the wiki.
+ * @fileoverview `lore query` Command Implementation.
  *
- * Uses the SQLite FTS index when one exists (`lore index`), otherwise a linear
- * scan. `--all` also searches repositories registered with `lore link`.
+ * @description
+ * Full-text keyword search and inspection interface for the architectural wiki:
+ *  - Accelerated Search: Automatically queries the SQLite FTS5 index (`.lore/meta/search.db`)
+ *    when available, gracefully falling back to linear in-memory scan.
+ *  - Empty Query: When invoked without arguments (`lore query`), displays an index
+ *    listing of all accepted ADRs and drafts.
+ *  - Federated Query (`--all`): Interrogates both the local wiki and all foreign repositories
+ *    linked via `lore link`.
  */
+
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { createStore } from "@lore/core";
 import { readLinks } from "./link.ts";
 
+/**
+ * Executes the `lore query` command.
+ *
+ * @param args Command line arguments (`<keywords>`, `--all`).
+ */
 export async function run(args: string[]): Promise<void> {
   const root = process.cwd();
   const store = createStore(root);

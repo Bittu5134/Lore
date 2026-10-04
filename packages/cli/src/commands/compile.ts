@@ -1,14 +1,24 @@
 /**
- * `lore compile` - distil captured events into an ADR.
+ * @fileoverview `lore compile` Command Implementation.
  *
- * Reads events since the cursor (or all with --last/--all), runs the Cline
- * inference, and writes the result to wiki/ (or drafts/ when low confidence).
+ * @description
+ * Distils captured raw telemetry events (`.lore/raw/*.jsonl`) into structured Architectural
+ * Decision Records (ADRs) using LLM reasoning.
+ *
+ * Execution Modes:
+ *  - Standard Mode: Invokes local Cline CLI (`cline -p`) using configured thinking effort.
+ *  - Offline Fixture Mode (`--fixture`): Uses deterministic mock decisions without network
+ *    access or model credentials. Ideal for offline demonstrations, CI test runs, and judges.
+ *  - Target Routing: High confidence (>= `confidenceThreshold`) routes to `.lore/wiki/`;
+ *    low confidence routes to `.lore/drafts/`.
+ *  - Incremental Cursor: Advances `lastEventTs` in `.lore/meta/state.json` to prevent re-processing.
  */
+
 import { createClineCompiler, createStore } from "@lore/core";
 
 /**
- * `--fixture` proves the whole pipeline with NO model call: for judges without
- * Cline auth, for CI, and for demos in an offline room.
+ * Deterministic decision fixture used when running with `--fixture`.
+ * Proves the end-to-end compilation, parsing, indexing, and storage pipeline without API keys.
  */
 export const FIXTURE_DECISION = {
   decisions: [
@@ -26,6 +36,11 @@ export const FIXTURE_DECISION = {
   ],
 };
 
+/**
+ * Executes the `lore compile` command.
+ *
+ * @param args Command line arguments (`--fixture`, `--all`, `--last`).
+ */
 export async function run(args: string[]): Promise<void> {
   const root = process.cwd();
   const store = createStore(root);

@@ -1,12 +1,22 @@
 /**
- * `lore review` - triage drafts into the accepted wiki.
+ * @fileoverview `lore review` Command Implementation.
  *
- *   lore review              list drafts awaiting review
- *   lore review ADR-0007     promote one
- *   lore review --all        promote every draft
+ * @description
+ * Human-in-the-loop review interface for triaging draft ADRs stored in `.lore/drafts/`.
+ *
+ * Modes:
+ *  - `lore review`: Displays a summary list of all pending drafts with their confidence scores.
+ *  - `lore review <ADR-ID>`: Validates and promotes a single draft to accepted status in `.lore/wiki/`.
+ *  - `lore review --all`: Promotes all pending drafts in bulk and regenerates `wiki/index.md`.
  */
+
 import { createStore } from "@lore/core";
 
+/**
+ * Executes the `lore review` command.
+ *
+ * @param args Command line arguments (`<id>`, `--all`).
+ */
 export async function run(args: string[]): Promise<void> {
   const store = createStore(process.cwd());
   const drafts = store.listAdrs("drafts");

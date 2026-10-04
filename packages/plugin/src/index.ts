@@ -1,11 +1,17 @@
 /**
- * Lane 2 - Lore capture plugin.
+ * @fileoverview Lore Cline Capture & Continuity Plugin Entrypoint.
  *
- * Registered with Cline via `cline plugin install ./packages/plugin`. Its
- * `onEvent` hook receives every AgentRuntimeEvent and appends a normalised
- * LoreEvent to .lore/raw/. This is how Lore observes the agent's reasoning
- * stream - the one thing MCP tools cannot do.
+ * @description
+ * Integrates Lore directly into the Cline agent lifecycle via `@cline/sdk`:
+ * 1. `setup()`: Injects the architectural continuity rule into agent working memory
+ *    and dynamically registers the Lore MCP server.
+ * 2. `hooks.onEvent()`: Streams live agent reasoning deltas, tool executions,
+ *    and run completions straight into Lore's append-only telemetry logs (`.lore/raw/`).
+ *
+ * This provides the unique "in-flight reasoning" capture capability that static
+ * code analyzers and git diff tools can never observe.
  */
+
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { LorePluginApi, RuntimeEventLike } from "./types.ts";

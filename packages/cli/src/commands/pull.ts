@@ -1,14 +1,24 @@
 /**
- * `lore pull <file>` - import a wiki bundle from another contributor.
+ * @fileoverview `lore pull` Command Implementation.
  *
- * Ids already present locally are skipped; imported ADRs go to wiki/ (accepted)
- * or drafts/ (draft status), and the index is regenerated.
+ * @description
+ * Imports a portable architectural knowledge bundle generated via `lore share`.
+ *
+ * Collision Handling:
+ * Skips records whose IDs are already present locally, preventing accidental
+ * overwrites of local consensus while importing missing historical decisions.
  */
+
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createStore } from "@lore/core";
 import type { LoreBundle } from "./share.ts";
 
+/**
+ * Executes the `lore pull` command.
+ *
+ * @param args Command line arguments (`<bundle.json>`).
+ */
 export async function run(args: string[]): Promise<void> {
   const file = args.find((a) => !a.startsWith("--"));
   if (!file) {

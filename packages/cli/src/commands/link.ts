@@ -1,24 +1,31 @@
 /**
- * `lore link` - related repositories whose wikis you can search together.
+ * @fileoverview `lore link` Command Implementation.
  *
- *   lore link add <path>      register another Lore repository
- *   lore link remove <path>   unregister it
- *   lore link                 list links
+ * @description
+ * Manages relationships between multiple repositories on the local filesystem.
+ * Enables federated, cross-repository architectural queries via `lore query <words> --all`.
  *
- * Pairs with `lore query <text> --all` for cross-project context.
+ * Commands:
+ *  - `lore link add <path>`: Validates and registers a foreign Lore-enabled repository.
+ *  - `lore link remove <path>`: Unregisters a linked repository.
+ *  - `lore link`: Lists all active repository links.
  */
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { LORE_PATHS } from "@lore/core";
 
+/** Registry structure tracking linked repository filepaths. */
 export interface LinkRegistry {
   repos: string[];
 }
 
+/** Computes absolute path to `.lore/meta/links.json`. */
 export function registryPath(root: string): string {
   return join(root, LORE_PATHS.meta, "links.json");
 }
 
+/** Reads the list of linked repository directories safely. */
 export function readLinks(root: string): LinkRegistry {
   try {
     const parsed = JSON.parse(readFileSync(registryPath(root), "utf8")) as LinkRegistry;
@@ -28,11 +35,17 @@ export function readLinks(root: string): LinkRegistry {
   }
 }
 
+/** Writes the linked repositories list to `.lore/meta/links.json`. */
 function writeLinks(root: string, registry: LinkRegistry): void {
   mkdirSync(join(root, LORE_PATHS.meta), { recursive: true });
   writeFileSync(registryPath(root), `${JSON.stringify(registry, null, 2)}\n`, "utf8");
 }
 
+/**
+ * Executes the `lore link` command.
+ *
+ * @param args Command line arguments (`add <path>`, `remove <path>`, `list`).
+ */
 export async function run(args: string[]): Promise<void> {
   const root = process.cwd();
   const sub = args[0] ?? "list";

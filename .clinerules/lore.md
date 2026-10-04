@@ -19,8 +19,12 @@ records (ADRs) in `.lore/wiki/ADR-*.md`.
    an ADR to `.lore/drafts/` using `.lore/wiki/ADR-0000-template.md`. Always
    include the alternatives you rejected and the reason - that is the most
    valuable part.
-5. Never edit `.lore/raw/` (immutable evidence) or `.lore/meta/` (bookkeeping).
+5. If the user explicitly states that a change is non-trivial or significant, record it
+   even when it looks small, and note in Consequences that the user flagged it. The user's
+   call overrides the size heuristic — but not the honesty rules: never invent alternatives
+   you did not actually consider.
+6. Never edit `.lore/raw/` (immutable evidence) or `.lore/meta/` (bookkeeping).
 
 ## At the end
 
-6. State which ADRs you consulted and what you recorded.
+7. State which ADRs you consulted and what you recorded.

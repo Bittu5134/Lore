@@ -1,14 +1,29 @@
 /**
- * `lore backfill [--full]` - document an existing repository's history.
+ * @fileoverview `lore backfill` Command Implementation.
  *
- * Replays git history through the same pipeline as `sync`, in batches so an
- * old repo gets a wiki without one giant prompt.
+ * @description
+ * Retroactively synthesizes an architectural decision wiki for pre-existing repositories
+ * by replaying git history through Lore's compilation pipeline.
+ *
+ * Architecture & Design:
+ *  - Incremental Batches: Processes commits in chunks of 8 (`BATCH_SIZE`) to keep prompt
+ *    token payloads bounded and manageable.
+ *  - Idempotent Progression: Updates the persistent cursor (`state.json`) after every
+ *    successful batch, allowing interrupted backfills to resume cleanly.
+ *  - `--full` Flag: Replays the entire git history from the initial commit instead of
+ *    only commits since the last recorded cursor.
  */
+
 import { createClineCompiler, createStore, type LoreEvent } from "@lore/core";
 import { allCommits, commitToEvent, commitsSince } from "./sync.ts";
 
 const BATCH_SIZE = 8;
 
+/**
+ * Executes the `lore backfill` command.
+ *
+ * @param args Command line arguments (`--full`).
+ */
 export async function run(args: string[]): Promise<void> {
   const full = args.includes("--full");
   const root = process.cwd();

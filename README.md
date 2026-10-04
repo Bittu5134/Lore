@@ -4,6 +4,8 @@
 was written by an AI agent or a human — and keeps those reasons inside the repository, next to the code,
 so the next person (or the next agent session) understands the constraints before changing anything.
 
+
+
 ---
 
 ## The problem
