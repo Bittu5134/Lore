@@ -98,6 +98,11 @@ the inference backend"). That is the product proving itself.
 
 ## Optional extras
 
+- **If you edit the capture plugin:** `cline plugin install --force` reuses the cached directory
+  (`~/.cline/plugins/_installed/local/<hash>`) and does NOT overwrite the file. Either
+  `cline plugin uninstall lore && cline plugin install ./packages/plugin`, or copy
+  `packages/plugin/src/index.ts` over the installed copy. Verify with
+  `grep -c inferenceInFlight <installed>/package/src/index.ts`.
 - **Live edit journey (watcher):** `lore watch` in one terminal, edit files in another →
   `fs_batch` events capture the road, not just the destination.
 - **Old repo backfill:** `lore backfill --full` documents an existing repository's history.

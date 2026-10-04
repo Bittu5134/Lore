@@ -5,6 +5,8 @@
  * but is injectable so tests never touch the network.
  */
 import { execFileSync } from "node:child_process";
+import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Adr, CompileInput, CompileResult, Compiler, LoreConfig } from "./types.ts";
 import { numericId, padId } from "./adr.ts";
 import { renderTranscript } from "./events.ts";
@@ -210,13 +212,36 @@ function defaultInfer(config: LoreConfig): InferenceFn {
     const args = ["-p", prompt, "--cwd", repoRoot];
     if (config.inference.thinking) args.push("--thinking", config.inference.thinking);
     if (config.inference.model) args.push("-m", config.inference.model);
-    return execFileSync("cline", args, {
-      cwd: repoRoot,
-      encoding: "utf8",
-      timeout: 300_000,
-      maxBuffer: 20 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+
+    // A filesystem lock marks "Lore is asking Cline to think right now". Cline may
+    // run plugins in a sandbox that does not inherit our env vars, so the lock file
+    // (not LORE_INTERNAL alone) is what reliably stops the capture plugin from
+    // recording the events of our own compilation - a runaway feedback loop.
+    const lockDir = join(repoRoot, ".lore", "meta");
+    const lock = join(lockDir, "inference.lock");
+    try {
+      mkdirSync(lockDir, { recursive: true });
+      writeFileSync(lock, String(Date.now()), "utf8");
+    } catch {
+      // best effort; env var below is the fallback signal
+    }
+
+    try {
+      return execFileSync("cline", args, {
+        cwd: repoRoot,
+        encoding: "utf8",
+        timeout: 300_000,
+        maxBuffer: 20 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+        env: { ...process.env, LORE_INTERNAL: "1" },
+      });
+    } finally {
+      try {
+        unlinkSync(lock);
+      } catch {
+        // already gone
+      }
+    }
   };
 }
 

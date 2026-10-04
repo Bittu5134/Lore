@@ -10,8 +10,26 @@
  * plugin; everything is wrapped in try/catch so capture can never break or
  * slow down the agent loop.
  */
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+
+function loreRoot(): string {
+  return process.env.LORE_ROOT ?? process.cwd();
+}
+
+/**
+ * True while Lore is running its own `cline` inference (`lore compile`/`sync`).
+ * Cline may sandbox plugins without inheriting our env vars, so this filesystem
+ * marker - written by the compiler - is the reliable signal.
+ */
+function inferenceInFlight(): boolean {
+  try {
+    const stat = statSync(join(loreRoot(), ".lore", "meta", "inference.lock"));
+    return Date.now() - stat.mtimeMs < 10 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
 
 interface RuntimeEventLike {
   type: string;
@@ -27,8 +45,7 @@ interface RuntimeEventLike {
 }
 
 function rawDir(): string {
-  const root = process.env.LORE_ROOT ?? process.cwd();
-  const dir = join(root, ".lore", "raw");
+  const dir = join(loreRoot(), ".lore", "raw");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -98,6 +115,8 @@ function toRecord(event: RuntimeEventLike): Record<string, unknown> | null {
 
 function capture(event: RuntimeEventLike): void {
   try {
+    // Never record the events of Lore's own inference runs.
+    if (process.env.LORE_INTERNAL || inferenceInFlight()) return;
     const record = toRecord(event);
     if (!record) return;
     appendFileSync(join(rawDir(), "session.jsonl"), `${JSON.stringify(record)}\n`, "utf8");

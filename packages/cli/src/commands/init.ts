@@ -100,6 +100,7 @@ export async function run(_args: string[]): Promise<void> {
   // Continuity rule for Cline (and any agent that reads .clinerules).
   const ruleSource = resolve(HERE, "..", "..", "..", "..", ".clinerules", "lore.md");
   if (existsSync(ruleSource)) {
+    mkdirSync(dirname(join(root, LORE_PATHS.ruleFile)), { recursive: true });
     if (writeIfAbsent(join(root, LORE_PATHS.ruleFile), readFileSync(ruleSource, "utf8")))
       created.push(LORE_PATHS.ruleFile);
   }
