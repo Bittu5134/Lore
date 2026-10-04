@@ -1,10 +1,9 @@
 <div align="center">
 
-# 🏛️ Lore
-
-### *Git records what changed. Lore records why.*
 
 ![Lore pitch deck cover](docs/assets/slide-1.png)
+
+### *Git records what changed. Lore records why.*
 
 **A local architectural knowledge engine — it captures the *reasoning* behind your code,
 whether that code was written by an AI agent or a human, and keeps it inside the repository,
