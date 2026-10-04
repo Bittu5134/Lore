@@ -92,7 +92,7 @@ The autonomy is the usability:
 
 - **Verified live, on the record:** a real Cline session → an ADR appeared **on its own in ~30 s,
   with zero manual commands** (this is in the repo history and reproducible).
-- **34 automated tests**, all passing; **all 4 packages type-check** clean; `npm run setup` and
+- **36 automated tests**, all passing; **all 4 packages type-check** clean; `npm run setup` and
   `lore doctor` both report green on a fresh clone.
 - Monorepo: `core` (store/compiler/events/ADR + SQLite FTS search) · `cli` (the `lore` command) ·
   `plugin` (Cline capture + continuity) · `mcp` (zero-dependency stdio server).
@@ -130,7 +130,7 @@ The `.lore/` folder: `raw/` (local evidence, git-ignored) · `wiki/` (committed 
 
 ## Honest status
 
-Everything in the demo path is verified end-to-end (34 tests, type-check clean, live autonomy proof).
+Everything in the demo path is verified end-to-end (36 tests, type-check clean, live autonomy proof).
 The plugin/MCP packages are covered by integration runs rather than a dedicated unit suite.
 Scaling for a 2-year, hundreds-of-contributors repo is designed and partly built; the remaining
 roadmap (partition retention, scheduled rollups, per-author id namespacing) is documented in

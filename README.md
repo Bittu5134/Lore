@@ -133,7 +133,7 @@ Run any command with `npx --yes tsx packages/cli/src/index.ts <cmd>`, or link th
 **Working today, verified end-to-end:** capture from live agent sessions (reasoning + tool trail),
 human commit capture via hooks, ADR compilation with a real model, offline fixture mode, FTS search +
 MCP, draft review, supersession, cross-repo sharing, merge reconciliation, the watcher, a secrets
-audit, and an HTML decision graph. 29 automated tests cover core; all packages type-check;
+audit, and an HTML decision graph. 36 automated tests cover core and CLI; all packages type-check;
 `npm run setup` and `lore doctor` both come back green on a fresh clone.
 
 **Scaling work already in place** (for a repository with years of history and many contributors):

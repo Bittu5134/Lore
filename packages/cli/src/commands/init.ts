@@ -4,7 +4,7 @@
  * Lane 0 (shared infrastructure): every other lane assumes these paths exist.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStore, LORE_PATHS } from "@lore/core";
@@ -109,6 +109,31 @@ export async function run(args: string[]): Promise<void> {
   const rulePath = join(root, LORE_PATHS.ruleFile);
   mkdirSync(dirname(rulePath), { recursive: true });
   if (writeIfAbsent(rulePath, RULE_TEXT)) created.push(LORE_PATHS.ruleFile);
+
+  // Ensure machine-local bookkeeping and raw evidence stay out of git in user repos.
+  const gitignorePath = join(root, ".gitignore");
+  const loreIgnores = [
+    "# Lore local state (ADRs in .lore/wiki/ are committed; raw logs and cursors stay local)",
+    ".lore/raw/",
+    ".lore/meta/state.json",
+    ".lore/meta/inference.lock",
+    ".lore/meta/previous-hooks-path.txt",
+    ".lore/meta/search.db",
+    ".lore/meta/links.json",
+    ".lore/wiki/graph.html",
+  ];
+  let existingGitignore = "";
+  try {
+    existingGitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf8") : "";
+  } catch {
+    existingGitignore = "";
+  }
+  const toAppend = loreIgnores.filter((line) => !existingGitignore.includes(line));
+  if (toAppend.length > 0) {
+    const trailingNewline = existingGitignore === "" || existingGitignore.endsWith("\n") ? "" : "\n";
+    writeFileSync(gitignorePath, `${existingGitignore}${trailingNewline}${toAppend.join("\n")}\n`, "utf8");
+    created.push(".gitignore");
+  }
 
   if (installHooks) {
     // Hooks live in .lore/hooks (committed with the repo) and are activated via core.hooksPath.

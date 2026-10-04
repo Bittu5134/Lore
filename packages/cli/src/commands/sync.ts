@@ -21,10 +21,21 @@ function git(root: string, args: string[]): string {
 export function commitToEvent(root: string, sha: string): LoreEvent {
   const ts = git(root, ["log", "-1", "--pretty=format:%cI", sha]) || new Date().toISOString();
   const message = git(root, ["log", "-1", "--pretty=format:%s%n%n%b", sha]);
-  const files = git(root, ["show", "--name-only", "--pretty=format:", sha])
+  // Exclude Lore's own internal directories (.lore/**) so decisions describe
+  // user code, not our own cursor/raw-evidence churn.
+  const files = git(root, ["show", "--name-only", "--pretty=format:", sha, "--", ".", ":(exclude).lore/**"])
     .split("\n")
     .filter((line) => line.trim() !== "");
-  const diff = git(root, ["show", "--patch", "--pretty=format:", "--unified=3", sha]).slice(0, 8000);
+  const diff = git(root, [
+    "show",
+    "--patch",
+    "--pretty=format:",
+    "--unified=3",
+    sha,
+    "--",
+    ".",
+    ":(exclude).lore/**",
+  ]).slice(0, 8000);
   return {
     ts,
     source: "git-commit",
